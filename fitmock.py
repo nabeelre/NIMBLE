@@ -475,7 +475,7 @@ if True:
 
     # then start a MCMC around the best-fit params
     paramdisp= numpy.ones(len(params))*0.1  # spread of initial walkers around best-fit params
-    nwalkers = 2*len(params)   # minimum possible number of walkers in emcee
+    nwalkers = 16*len(params)   # minimum possible number of walkers in emcee
     nsteps   = 500
     walkers  = numpy.empty((nwalkers, len(params)))
     numtries = 0
@@ -519,7 +519,7 @@ if True:
         axes[-1].set_ylim(maxloglike-3*len(params), maxloglike)
         plt.tight_layout(h_pad=0)
         plt.subplots_adjust(hspace=0,wspace=0)
-        2. corner plot - covariances of all parameters
+        # 2. corner plot - covariances of all parameters
         corner.corner(chain, quantiles=[0.16, 0.5, 0.84], labels=paramnames, show_titles=True)
-        3. density and velocity dispersion profiles - same as before
+        # 3. density and velocity dispersion profiles - same as before
         plotprofiles(chain[::20])  # *****
