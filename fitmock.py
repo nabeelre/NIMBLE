@@ -1,5 +1,6 @@
-import numpy, scipy.special, scipy.optimize, emcee, corner, agama, matplotlib.pyplot as plt
+import os, numpy, scipy.special, scipy.optimize, emcee, corner, agama, time, matplotlib.pyplot as plt
 from pygaia.errors.astrometric import proper_motion_uncertainty, total_proper_motion_uncertainty
+from multiprocessing import Pool
 numpy.set_printoptions(linewidth=200, precision=6, suppress=True)
 numpy.random.seed(42)
 
@@ -17,8 +18,15 @@ d2r   = numpy.pi/180  # conversion from degrees to radians
 # TO DO:
 # combine makeMock & readMock to reduce repeated code
 # true sigma and density profiles for Latte datasets -> combine both tangential dispersions
-# Check to see what total_proper_motion_uncertainty is ... sum or average or something else?
 # LSR information for latte datasets and coordinate rotations where necessary
+# test on indu.astro
+
+# Notes:
+# Check to see what total_proper_motion_uncertainty is ... sum or average or something else?
+    # total_proper_motion_uncertainty is a simple average of the PM RAcosdec and PM Dec uncertainties
+    # So, no need to divide its output by two when using it as PMerr: a single unc for either direction
+# emcee parallelization will probably only work with newer emcee versions
+
 
 def makeMock(density, potential, beta0, r_a, nbody, gaiaRelease):
     # create a spherical anisotropic DF and compute its true velocity dispersions
@@ -198,13 +206,19 @@ den = agama.Density(type='spheroid', gamma=1, beta=5, scaleradius=20)   # some f
 l, b, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat = \
     makeMock(den, pot, beta0=-0.5, r_a=60.0, nbody=30000, gaiaRelease='dr5')
 
+figs_path = "figs/"
+if not os.path.exists(figs_path):
+    os.makedirs(figs_path)
+    print("created output directory for figures at figs/")
+
+
 # l, b, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat = readMock("m12f", gaiaRelease)
 
 print('%i stars in the survey volume' % len(l))
 blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
 
 # diagnostic plot showing the stars in l,b and the selection region boundary
-if not True:
+if True:
     plt.scatter(l, b, s=2, c=Gapp, cmap='hell', vmin=Gmin, vmax=Gmax+1, edgecolors='none')
     if blow <= -bmin*d2r:  # selection region in the southern Galactic hemisphere
         bb=numpy.linspace(blow, -bmin*d2r, 100)
@@ -218,10 +232,11 @@ if not True:
         plt.plot(numpy.hstack((l1, l2[::-1], l1[0])) / d2r, numpy.hstack((bb, bb[::-1], bb[0])) / d2r, 'g')
     plt.xlabel('l')
     plt.ylabel('b')
+    plt.savefig(figs_path+"sel_bounds.png", dpi=250)
+    plt.cla()
     plt.show()
 
 #fitDensityProfile(l, b, Gapp, pml, pmb, vlos, PMerr, vloserr)
-
 #def fitDensityProfile(l, b, Gapp, pml, pmb, vlos, PMerr, vloserr):
 
 # this used to be a function, but the MCMC parallelization doesn't work unless the likelihood fnc
@@ -383,7 +398,7 @@ if True:
             print("%s => %s" % (params, ex))
             return -numpy.inf
 
-    def plotprofiles(chain):
+    def plotprofiles(chain, plotname="a"):
         ax = plt.subplots(1, 2, figsize=(10,5))[1]
         # left panel: density profiles
         # *****
@@ -441,6 +456,7 @@ if True:
         ax[1].legend(loc='upper left', frameon=False)
 
         plt.tight_layout()
+        plt.savefig(figs_path+plotname+".png", dpi=250)
         plt.show()
 
     # initial values of parameters
@@ -471,11 +487,11 @@ if True:
         prevmaxloglike = maxloglike
 
     # show profiles and wait for the user to marvel at them
-    plotprofiles(params.reshape(1,-1))  # *****
-
+    plotprofiles(params.reshape(1,-1), "preMCMC")  # *****
+    
     # then start a MCMC around the best-fit params
     paramdisp= numpy.ones(len(params))*0.1  # spread of initial walkers around best-fit params
-    nwalkers = 16*len(params)   # minimum possible number of walkers in emcee
+    nwalkers = 2*len(params)   # minimum possible number of walkers in emcee
     nsteps   = 500
     walkers  = numpy.empty((nwalkers, len(params)))
     numtries = 0
@@ -488,38 +504,48 @@ if True:
             numtries+=1
     if numtries>=10000:
         raise RuntimeError('cannot initialize MCMC')
-    numthreads = nwalkers//2   # parallel threads in emcee - make sure you don't clog up your machine!
-    sampler  = emcee.EnsembleSampler(nwalkers, len(params), likelihood, threads=numthreads)
-    print('Starting MCMC search')
-    converged = False
-    while not converged:  # run several passes until log-likelihood stabilizes (convergence is reached)
-        sampler.run_mcmc(walkers, nsteps)
-        walkers = sampler.chain[:,-1]
-        chain   = sampler.chain[:,-nsteps:].reshape(-1, len(params))
-        maxloglike = numpy.max (sampler.lnprobability[:,-nsteps:])
-        avgloglike = numpy.mean(sampler.lnprobability[:,-nsteps:])
-        walkll = sampler.lnprobability[:,-1]
-        for i in range(len(params)):
-            print('%s = %8.4g +- %7.4g' % (paramnames[i], numpy.mean(chain[:,i]), numpy.std(chain[:,i])))
-        print('max loglikelihood: %.2f, average: %.2f' % (maxloglike, avgloglike))
-        converged = abs(maxloglike-prevmaxloglike) < 1.0 and abs(avgloglike-prevavgloglike) < 2.0
-        prevmaxloglike = maxloglike
-        prevavgloglike = avgloglike
-        if converged: print('Converged'); plotprofiles(chain[::20])
+    with Pool() as pool:
+        # numthreads = nwalkers//2   # parallel threads in emcee - make sure you don't clog up your machine!
+        start = time.time()
+        sampler  = emcee.EnsembleSampler(nwalkers, len(params), likelihood, pool=pool)
+        print('Starting MCMC search')
+        converged = False
+        iter = 0
+        while not converged:  # run several passes until log-likelihood stabilizes (convergence is reached)
+            sampler.run_mcmc(walkers, nsteps, progress=True)
+            walkers = sampler.chain[:,-1]
+            chain   = sampler.chain[:,-nsteps:].reshape(-1, len(params))
+            maxloglike = numpy.max (sampler.lnprobability[:,-nsteps:])
+            avgloglike = numpy.mean(sampler.lnprobability[:,-nsteps:])
+            walkll = sampler.lnprobability[:,-1]
+            for i in range(len(params)):
+                print('%s = %8.4g +- %7.4g' % (paramnames[i], numpy.mean(chain[:,i]), numpy.std(chain[:,i])))
+            print('max loglikelihood: %.2f, average: %.2f' % (maxloglike, avgloglike))
+            converged = abs(maxloglike-prevmaxloglike) < 1.0 and abs(avgloglike-prevavgloglike) < 2.0
+            prevmaxloglike = maxloglike
+            prevavgloglike = avgloglike
+            if converged: print('Converged'); plotprofiles(chain[::20], "converged")
 
-        # produce diagnostic plots after each MCMC episode:
-        # 1. evolution of parameters along the chain for each walker *****
-        axes = plt.subplots(len(params)+1, 1, sharex=True, figsize=(10,10))[1]
-        for i in range(len(params)):
-            axes[i].plot(sampler.chain[:,:,i].T, color='k', alpha=0.5)
-            axes[i].set_xticklabels([])
-            axes[i].set_ylabel(paramnames[i])
-        axes[-1].plot(sampler.lnprobability.T, color='k', alpha=0.5)
-        axes[-1].set_ylabel('likelihood')   # bottom panel is the evolution of likelihood
-        axes[-1].set_ylim(maxloglike-3*len(params), maxloglike)
-        plt.tight_layout(h_pad=0)
-        plt.subplots_adjust(hspace=0,wspace=0)
-        # 2. corner plot - covariances of all parameters
-        corner.corner(chain, quantiles=[0.16, 0.5, 0.84], labels=paramnames, show_titles=True)
-        # 3. density and velocity dispersion profiles - same as before
-        plotprofiles(chain[::20])  # *****
+            # produce diagnostic plots after each MCMC episode:
+            # 1. evolution of parameters along the chain for each walker *****
+            axes = plt.subplots(len(params)+1, 1, sharex=True, figsize=(10,10))[1]
+            for i in range(len(params)):
+                axes[i].plot(sampler.chain[:,:,i].T, color='k', alpha=0.5)
+                axes[i].set_xticklabels([])
+                axes[i].set_ylabel(paramnames[i])
+            axes[-1].plot(sampler.lnprobability.T, color='k', alpha=0.5)
+            axes[-1].set_ylabel('likelihood')   # bottom panel is the evolution of likelihood
+            axes[-1].set_ylim(maxloglike-3*len(params), maxloglike)
+            plt.tight_layout(h_pad=0)
+            plt.subplots_adjust(hspace=0,wspace=0)
+            plt.savefig(figs_path+"param_evol_iter"+str(iter)+".png", dpi=350)
+            plt.show()
+            # 2. corner plot - covariances of all parameters
+            corner.corner(chain, quantiles=[0.16, 0.5, 0.84], labels=paramnames, show_titles=True)
+            plt.savefig(figs_path+"corner_iter"+str(iter)+".png", dpi=350)
+            plt.show()
+            # 3. density and velocity dispersion profiles - same as before
+            if not converged: plotprofiles(chain[::20], "MCMC_iter"+str(iter))  # *****
+            iter += 1
+    print("MCMC run time:", time.time()-start)
+    plt.show()
