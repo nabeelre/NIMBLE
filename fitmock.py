@@ -5,7 +5,7 @@ numpy.set_printoptions(linewidth=200, precision=6, suppress=True)
 numpy.random.seed(42)
 
 Gmax  = 20.7   # max apparent G magnitude for a RRL star to enter the selection
-Gmin  = 10.0   # min apparent G magnitude (exclude nearby stars) -- ***** DESI lower limit is 15 or 16, look for ref
+Gmin  = 16.0   # min apparent G magnitude (exclude nearby stars)
 Grrl  = 0.58   # abs.magnitude of RRL (mean value; the actual value for each star is scattered around it)
 DMerr = 0.24   # scatter in abs.magnitude
 # assume that the error in distance modulus is purely due to intrinsic scatter in abs.mag
@@ -16,7 +16,6 @@ decmin=-35.0   # min declination for the selection box (degrees)
 d2r   = numpy.pi/180  # conversion from degrees to radians
 
 # TO DO:
-# combine makeMock & readMock to reduce repeated code
 # true sigma and density profiles for Latte datasets -> combine both tangential dispersions
 # LSR information for latte datasets and coordinate rotations where necessary
 # test on indu.astro
@@ -26,23 +25,106 @@ d2r   = numpy.pi/180  # conversion from degrees to radians
     # total_proper_motion_uncertainty is a simple average of the PM RAcosdec and PM Dec uncertainties
     # So, no need to divide its output by two when using it as PMerr: a single unc for either direction
 # emcee parallelization will probably only work with newer emcee versions
+# combine makeMock & readMock to reduce repeated code
+# DESI lower mag limit is 16? https://arxiv.org/pdf/2010.11284.pdf - says 16 in r mag
 
 
-def makeMock(density, potential, beta0, r_a, nbody, gaiaRelease):
-    # create a spherical anisotropic DF and compute its true velocity dispersions
-    df = agama.DistributionFunction(type='quasispherical',
-        density=density, potential=potential, beta0=beta0, r_a=r_a)
-    gm = agama.GalaxyModel(potential, df)
+# def cartesian_to_spherical(xpos, ypos, zpos, xVel, yVel, zVel):
+#     numParticles = len(xpos)
+#     sinTheta = numpy.zeros(numParticles)
+#     cosTheta = numpy.zeros(numParticles)
+
+#     sinPhi = numpy.zeros(numParticles)
+#     cosPhi = numpy.zeros(numParticles)
+
+#     for i in range(0, numParticles):
+#         sinTheta[i] = numpy.sqrt(xpos[i]**2 + ypos[i]**2) / numpy.sqrt(xpos[i]**2 + ypos[i]**2 + zpos[i]**2)
+#         cosTheta[i] = zpos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2 + zpos[i]**2)
+#         sinPhi[i] = ypos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2)
+#         cosPhi[i] = xpos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2)
+
+#     rVel = numpy.zeros(numParticles)
+#     tVel = numpy.zeros(numParticles)
+#     pVel = numpy.zeros(numParticles)
+
+#     for i in range(0, numParticles):
+#         conversionMatrix = [[sinTheta[i] * cosPhi[i], sinTheta[i] * sinPhi[i],  cosTheta[i]],
+#                             [cosTheta[i] * cosPhi[i], cosTheta[i] * sinPhi[i], -sinTheta[i]],
+#                             [       -sinPhi[i]      ,        cosPhi[i]       ,        0    ]]
+
+#         velMatrix = [ [xVel[i]], [yVel[i]], [zVel[i]] ]
+
+#         sphereVels = numpy.matmul(conversionMatrix, velMatrix)
+
+#         rVel[i] = sphereVels[0]
+#         tVel[i] = sphereVels[1]
+#         pVel[i] = sphereVels[2]
+
+#     return rVel, tVel, pVel
+
+
+def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None, r_a=None, nbody=None, lattesim=None):
     rr = numpy.logspace(0, 2, 15)
     xyz= numpy.column_stack((rr, rr*0, rr*0))
-    sig= gm.moments(xyz, dens=False, vel=False, vel2=True)
-    # represent sigma profiles as cubic splines for log(sigma) as a function of log(r)
-    true_sigmar = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,0]**0.5))
-    true_sigmat = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,1]**0.5))
+    if datasetType == 'agama':
+         # create a spherical anisotropic DF and compute its true velocity dispersions
+        df = agama.DistributionFunction(type='quasispherical',
+            density=density, potential=potential, beta0=beta0, r_a=r_a)
+        gm = agama.GalaxyModel(potential, df)
+        
+        sig= gm.moments(xyz, dens=False, vel=False, vel2=True)
+        # represent sigma profiles as cubic splines for log(sigma) as a function of log(r)
+        true_sigmar = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,0]**0.5))
+        true_sigmat = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,1]**0.5))
 
-    # sample 6d points from the model (over the entire space)
-    xv = gm.sample(nbody)[0]
-    # convert to galactic (heliocentric) celestial coords
+        # sample 6d points from the model (over the entire space)
+        xv = gm.sample(nbody)[0]
+        radii = numpy.sqrt(xv[:,0]**2 + xv[:,1]**2 + xv[:,2]**2)
+
+        # rvel, tvel, pvel = cartesian_to_spherical(xv[:,0], xv[:,1], xv[:,2], xv[:,3], xv[:,4], xv[:,5])
+
+        # rvelsq = numpy.asarray([i**2 for i in rvel])
+        # tvelsq = numpy.asarray([i**2 for i in tvel])
+        # pvelsq = numpy.asarray([i**2 for i in pvel])
+        
+        # true_sigmar    = agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(rvelsq)*0.5)
+        # true_sigmatheta2 = lambda lr: numpy.sqrt(agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(tvelsq))(lr))
+        # true_sigmaphi2   = lambda lr: numpy.sqrt(agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(pvelsq))(lr))
+        # true_sigmat     = lambda lr: (true_sigmaphi2(lr) + true_sigmatheta2(lr)) / 2
+
+        # plt.plot(rr, numpy.exp(true_sigmar2(numpy.log(rr))), c='r', linestyle='dashed')
+        # plt.plot(numpy.log(rr), true_sigmaphi2(numpy.log(rr)))
+        # plt.plot(numpy.log(rr), true_sigmatheta2(numpy.log(rr)))
+        # plt.plot(rr, numpy.exp(true_sigmat2(numpy.log(rr))), c='b', linestyle='dashed')
+
+        # plt.plot(rr, numpy.exp(true_sigmar(numpy.log(rr))), c='r', linestyle='solid')
+        # plt.plot(rr, numpy.exp(true_sigmat(numpy.log(rr))), c='b', linestyle='solid')
+        
+        # plt.savefig("testing.png")
+        # plt.show()
+        # exit(1)
+        
+    if datasetType == 'latte':
+        # dataset for m12f available at https://drive.google.com/file/d/1Z8lQEdPeX1995WDJsc1qxeh07ZDLBZXr/view?usp=sharing
+        # formatted such that rows represent particles and columns represent different quantites
+        # col 0-5: cartesian positions and velocities, col 6: particle mass, col 7: galactocentric spherical radius
+        # col 8-10: square of spherical velocity components - r (radial), theta (polar), phi (azimuthal)
+        x, y, z, vx, vy, vz, mass, radii, rvelsq, tvelsq, pvelsq = numpy.loadtxt(f"latte/{lattesim}/{lattesim}_chem-1.5_full.csv", unpack=True, skiprows=1, delimiter=',')
+        xv = numpy.column_stack((x, y, z, vx, vy, vz))
+        nbody = len(x)
+
+        # represent sigma profiles as cubic splines for log(sigma) as a function of log(r)
+        sorter = numpy.argsort(radii)
+        radii = radii[sorter]
+        rvelsq = rvelsq[sorter]
+        tvelsq = tvelsq[sorter]
+        pvelsq = pvelsq[sorter]
+
+        true_sigmar     = agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(rvelsq)*0.5)
+        true_sigmatheta = lambda lr: numpy.sqrt(agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(tvelsq))(lr))
+        true_sigmaphi   = lambda lr: numpy.sqrt(agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(pvelsq))(lr))
+        true_sigmat     = lambda lr: (true_sigmaphi(lr) + true_sigmatheta(lr)) / 2
+
     l,b,dist,pml,pmb,vlos = agama.getGalacticFromGalactocentric(*xv.T)
     ra, dec, pmra, pmdec  = agama.transformCelestialCoords(agama.fromGalactictoICRS, l, b, pml, pmb)
     l   /=d2r;  b   /=d2r   # convert from radians to degrees
@@ -80,66 +162,7 @@ def makeMock(density, potential, beta0, r_a, nbody, gaiaRelease):
     vloserr = numpy.ones(nbody) * 2.0
     vlos += numpy.random.normal(size=nbody) * vloserr
 
-    return (l[filt], b[filt], Gapp[filt], pml[filt], pmb[filt], vlos[filt], PMerr[filt], vloserr[filt],
-        true_sigmar, true_sigmat)
-
-
-def readMock(lattesim, gaiaRelease):
-    x, y, z, vx, vy, vz, m, r, _, _, _ = numpy.loadtxt(f"../data/latte/{lattesim}/{lattesim}_chem-1.5_full.csv", unpack=True, skiprows=1, delimiter=',')
-    nbody = len(x)
-
-    rr = numpy.logspace(0, 2, 15)
-    xyz= numpy.column_stack((rr, rr*0, rr*0))
-    # sig= gm.moments(xyz, dens=False, vel=False, vel2=True)
-
-    # represent sigma profiles as cubic splines for log(sigma) as a function of log(r)
-    # true_sigmar = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,0]**0.5))
-    # true_sigmat = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,1]**0.5))  # sqrt((sigphi**2 + sigtheta**2)  /2 )
-
-    # sample 6d points from the model (over the entire space)
-    xv = numpy.column_stack((x, y, z, vx, vy, vz))
-
-    # convert to galactic (heliocentric) celestial coords
-    l,b,dist,pml,pmb,vlos = agama.getGalacticFromGalactocentric(*xv.T)
-    ra, dec, pmra, pmdec  = agama.transformCelestialCoords(agama.fromGalactictoICRS, l, b, pml, pmb)
-    l   /=d2r;  b   /=d2r   # convert from radians to degrees
-    ra  /=d2r;  dec /=d2r
-    pml /=4.74; pmb /=4.74  # convert from km/s/kpc to mas/yr
-    pmra/=4.74; pmdec/=4.74
-
-    # impose spatial selection based on the survey footprint
-    filt = (abs(b) >= bmin) * (dec >= decmin)
-
-    # compute apparent G-band magnitude and impose a cut Gmin<G<Gmax
-    Gabs = Grrl + numpy.random.normal(size=nbody) * DMerr  # abs.mag with scatter
-    Gapp = Gabs + 5*numpy.log10(dist) + 10  # apparent magnitude
-    filt *= (Gapp > Gmin) * (Gapp < Gmax)
-
-    # add PM errors depending on G magnitude:
-
-    # Doesnt work with current cov matrix set up
-    # pmracosdec_err, pmdec_err = proper_motion_uncertainty(Gapp, release=gaiaRelease)  # uas/yr
-    # pmra_err *= 0.001; pmdec_err *= 0.001  # uas/yr -> mas/yr
-
-    PMerr = total_proper_motion_uncertainty(Gapp, release=gaiaRelease)  # uas/yr
-    PMerr *= 0.001  # uas/yr -> mas/yr
-
-    pmra  += numpy.random.normal(size=nbody) * PMerr
-    pmdec += numpy.random.normal(size=nbody) * PMerr
-
-    # RA, Dec back to radians
-    # go back to galactic coords
-    ra *= d2r
-    dec *= d2r
-    l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic, ra, dec, pmra, pmdec)
-    l /= d2r
-    b /= d2r
-
-    # add Vlos errors
-    vloserr = numpy.ones(nbody) * 2.0
-    vlos += numpy.random.normal(size=nbody) * vloserr
-
-    return (l[filt], b[filt], Gapp[filt], pml[filt], pmb[filt], vlos[filt], PMerr[filt], vloserr[filt],
+    return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt], vlos[filt], PMerr[filt], vloserr[filt],
         true_sigmar, true_sigmat)
 
 
@@ -200,22 +223,28 @@ def getSurveyFootprintBoundary(decmin):
 
 
 gaiaRelease = 'dr3'
-agama.setUnits(length=1, mass=1, velocity=1)
-pot = agama.Potential(type='nfw', scaleradius=18, mass=1e12)    # a typical Milky Way-sized NFW halo
-den = agama.Density(type='spheroid', gamma=1, beta=5, scaleradius=20)   # some fiducial stellar halo profile
-l, b, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat = \
-    makeMock(den, pot, beta0=-0.5, r_a=60.0, nbody=30000, gaiaRelease='dr5')
+datasetType = 'latte'  # 'latte' or 'agama'
 
-figs_path = "figs/"
-if not os.path.exists(figs_path):
-    os.makedirs(figs_path)
-    print("created output directory for figures at figs/")
-
-
-# l, b, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat = readMock("m12f", gaiaRelease)
+if datasetType == 'agama':
+    agama.setUnits(length=1, mass=1, velocity=1)
+    pot = agama.Potential(type='nfw', scaleradius=18, mass=1e12)    # a typical Milky Way-sized NFW halo
+    den = agama.Density(type='spheroid', gamma=1, beta=5, scaleradius=20)   # some fiducial stellar halo profile
+    l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat = loadMock(datasetType=datasetType, gaiaRelease=gaiaRelease, density=den, potential=pot, beta0=-0.5, r_a=60.0, nbody=30000)
+    figs_path = f"agama_{gaiaRelease}_figs/"
+elif datasetType == 'latte':
+    lattesim = "m12f"
+    l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat = loadMock(datasetType=datasetType, lattesim=lattesim, gaiaRelease=gaiaRelease)
+    figs_path = f"latte_{lattesim}_{gaiaRelease}_figs/"
+else:
+    print("datasetType not understood")
+    exit(1)
 
 print('%i stars in the survey volume' % len(l))
 blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
+
+if not os.path.exists(figs_path):
+    os.makedirs(figs_path)
+    print("created output directory for figures at " + figs_path)
 
 # diagnostic plot showing the stars in l,b and the selection region boundary
 if True:
@@ -401,11 +430,14 @@ if True:
     def plotprofiles(chain, plotname="a"):
         ax = plt.subplots(1, 2, figsize=(10,5))[1]
         # left panel: density profiles
-        # *****
-        trueparams_dens = numpy.log(den.density(numpy.column_stack((numpy.exp(knots_logr), knots_logr*0, knots_logr*0))))
-        trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]  # set the first element of array to zero and exclude it
         r  = numpy.logspace(0, 2, 41)
         lr = numpy.log(r)
+        if datasetType == 'agama':
+            trueparams_dens = numpy.log(den.density(numpy.column_stack((numpy.exp(knots_logr), knots_logr*0, knots_logr*0))))
+        if datasetType == 'latte':
+            S = agama.splineLogDensity(knots_logr, x=numpy.log(radii), w=numpy.ones(len(radii)))
+            trueparams_dens = numpy.log((numpy.exp(S(knots_logr))) / (4.0 * numpy.pi * (numpy.exp(knots_logr)**3)))
+        trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]  # set the first element of array to zero and exclude it
         truedens = numpy.exp(modelDensity(trueparams_dens)(lr))
         ax[0].plot(r, truedens, 'k--', label='true density')
         # retrieve density profiles of each model in the chain, and compute median and 16/84 percentiles
@@ -427,7 +459,7 @@ if True:
         ax[0].set_xscale('log')
         ax[0].set_yscale('log')
         ax[0].set_xlim(min(r), max(r))
-        ax[0].set_ylim(min(truedens)*0.2, max(truedens)*2)  # *****
+        ax[0].set_ylim(min(truedens)*0.2, max(truedens)*2)
         ax[0].legend(loc='upper right', frameon=False)
 
         # right panel: velocity dispersion profiles
@@ -487,7 +519,7 @@ if True:
         prevmaxloglike = maxloglike
 
     # show profiles and wait for the user to marvel at them
-    plotprofiles(params.reshape(1,-1), "preMCMC")  # *****
+    plotprofiles(params.reshape(1,-1), "preMCMC")
     
     # then start a MCMC around the best-fit params
     paramdisp= numpy.ones(len(params))*0.1  # spread of initial walkers around best-fit params
@@ -527,7 +559,7 @@ if True:
             if converged: print('Converged'); plotprofiles(chain[::20], "converged")
 
             # produce diagnostic plots after each MCMC episode:
-            # 1. evolution of parameters along the chain for each walker *****
+            # 1. evolution of parameters along the chain for each walker
             axes = plt.subplots(len(params)+1, 1, sharex=True, figsize=(10,10))[1]
             for i in range(len(params)):
                 axes[i].plot(sampler.chain[:,:,i].T, color='k', alpha=0.5)
@@ -545,7 +577,7 @@ if True:
             plt.savefig(figs_path+"corner_iter"+str(iter)+".png", dpi=350)
             plt.show()
             # 3. density and velocity dispersion profiles - same as before
-            if not converged: plotprofiles(chain[::20], "MCMC_iter"+str(iter))  # *****
+            if not converged: plotprofiles(chain[::20], "MCMC_iter"+str(iter))
             iter += 1
     print("MCMC run time:", time.time()-start)
     plt.show()
