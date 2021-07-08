@@ -1,4 +1,4 @@
-import os, numpy, scipy.special, scipy.optimize, emcee, corner, agama, time, matplotlib.pyplot as plt
+import os, sys, numpy, scipy.special, scipy.optimize, emcee, corner, agama, time, matplotlib.pyplot as plt
 from pygaia.errors.astrometric import proper_motion_uncertainty, total_proper_motion_uncertainty
 from multiprocessing import Pool
 numpy.set_printoptions(linewidth=200, precision=6, suppress=True)
@@ -16,7 +16,6 @@ decmin=-35.0   # min declination for the selection box (degrees)
 d2r   = numpy.pi/180  # conversion from degrees to radians
 
 # TO DO:
-# true sigma and density profiles for Latte datasets -> combine both tangential dispersions
 # LSR information for latte datasets and coordinate rotations where necessary
 # test on indu.astro
 
@@ -27,40 +26,7 @@ d2r   = numpy.pi/180  # conversion from degrees to radians
 # emcee parallelization will probably only work with newer emcee versions
 # combine makeMock & readMock to reduce repeated code
 # DESI lower mag limit is 16? https://arxiv.org/pdf/2010.11284.pdf - says 16 in r mag
-
-
-def cartesian_to_spherical(xpos, ypos, zpos, xVel, yVel, zVel):
-    numParticles = len(xpos)
-    sinTheta = numpy.zeros(numParticles)
-    cosTheta = numpy.zeros(numParticles)
-
-    sinPhi = numpy.zeros(numParticles)
-    cosPhi = numpy.zeros(numParticles)
-
-    for i in range(0, numParticles):
-        sinTheta[i] = numpy.sqrt(xpos[i]**2 + ypos[i]**2) / numpy.sqrt(xpos[i]**2 + ypos[i]**2 + zpos[i]**2)
-        cosTheta[i] = zpos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2 + zpos[i]**2)
-        sinPhi[i] = ypos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2)
-        cosPhi[i] = xpos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2)
-
-    rVel = numpy.zeros(numParticles)
-    tVel = numpy.zeros(numParticles)
-    pVel = numpy.zeros(numParticles)
-
-    for i in range(0, numParticles):
-        conversionMatrix = [[sinTheta[i] * cosPhi[i], sinTheta[i] * sinPhi[i],  cosTheta[i]],
-                            [cosTheta[i] * cosPhi[i], cosTheta[i] * sinPhi[i], -sinTheta[i]],
-                            [       -sinPhi[i]      ,        cosPhi[i]       ,        0    ]]
-
-        velMatrix = [ [xVel[i]], [yVel[i]], [zVel[i]] ]
-
-        sphereVels = numpy.matmul(conversionMatrix, velMatrix)
-
-        rVel[i] = sphereVels[0]
-        tVel[i] = sphereVels[1]
-        pVel[i] = sphereVels[2]
-
-    return rVel, tVel, pVel
+# true sigma and density profiles for Latte datasets -> combine both tangential dispersions
 
 
 def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None, r_a=None, nbody=None, lattesim=None):
@@ -72,44 +38,24 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
             density=density, potential=potential, beta0=beta0, r_a=r_a)
         gm = agama.GalaxyModel(potential, df)
         
-        sig= gm.moments(xyz, dens=False, vel=False, vel2=True)
-        # represent sigma profiles as cubic splines for log(sigma) as a function of log(r)
-        true_sigmar = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,0]**0.5))
-        true_sigmat = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,1]**0.5))
-
         # sample 6d points from the model (over the entire space)
         xv = gm.sample(nbody)[0]
         radii = numpy.sqrt(xv[:,0]**2 + xv[:,1]**2 + xv[:,2]**2)
 
-        # rvel, tvel, pvel = cartesian_to_spherical(xv[:,0], xv[:,1], xv[:,2], xv[:,3], xv[:,4], xv[:,5])
-        
-        # true_sigmar2 = agama.splineApprox(numpy.log(rr), numpy.log(radii), rvel**2)
-        # true_sigmat2 = agama.splineApprox(numpy.log(rr), numpy.log(radii), (tvel**2 + pvel**2)/2)
-        # # plt.plot(rr, true_sigmar2(numpy.log(rr))**0.5, 'r--')
-        # plt.plot(rr, true_sigmat2(numpy.log(rr))**0.5, 'b--')
-
-        # plt.plot(rr, numpy.exp(true_sigmar(numpy.log(rr))), c='r', linestyle='solid')
-        # plt.plot(rr, numpy.exp(true_sigmat(numpy.log(rr))), c='b', linestyle='solid')
-        
-        # plt.savefig("testing.png")
-        # plt.show()
-        # exit(1)
-        
-    if datasetType == 'latte':
+        sig= gm.moments(xyz, dens=False, vel=False, vel2=True)
+        # represent sigma profiles as cubic splines for log(sigma) as a function of log(r)
+        true_sigmar = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,0]**0.5))
+        true_sigmat = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,1]**0.5))
+    elif datasetType == 'latte':
         # dataset for m12f available at https://drive.google.com/file/d/1Z8lQEdPeX1995WDJsc1qxeh07ZDLBZXr/view?usp=sharing
         # formatted such that rows represent particles and columns represent different quantites
         # col 0-5: cartesian positions and velocities, col 6: particle mass, col 7: galactocentric spherical radius
         # col 8-10: square of spherical velocity components - r (radial), theta (polar), phi (azimuthal)
+        x, y, z, vx, vy, vz, mass, radii, rvelsq, tvelsq, pvelsq = numpy.loadtxt(f"latte/{lattesim}/{lattesim}_chem-1.5_full.csv", unpack=True, skiprows=1, delimiter=',')
         xv = numpy.column_stack((x, y, z, vx, vy, vz))
         nbody = len(x)
 
         # represent sigma profiles as cubic splines for log(sigma) as a function of log(r)
-        sorter = numpy.argsort(radii)
-        radii = radii[sorter]
-        rvelsq = rvelsq[sorter]
-        tvelsq = tvelsq[sorter]
-        pvelsq = pvelsq[sorter]
-
         true_sigmar = agama.splineApprox(numpy.log(rr), numpy.log(radii), rvelsq)
         true_sigmat = agama.splineApprox(numpy.log(rr), numpy.log(radii), (tvelsq + pvelsq)/2)
         
@@ -209,9 +155,34 @@ def getSurveyFootprintBoundary(decmin):
     else:  # excluded a region outside a closed loop around North pole; b must be between b1 and b2
         return b1, b2, lambda b: curve(b, ext=lp[1]), lp[1]
 
+# HOW TO RUN SCRIPT
+# FIRST ARG: datasetType, must be 'latte' or 'agama'
+# SECOND ARG: gaiaRelease, must be 'dr3', 'dr4', or 'dr5'
+# THIRD ARG (optional): lattesim, must be 'm12f', 'm12i', or 'm12m'
+    # defaults to m12f, and exits when provided with agama datasetType
+# Ex: python fitmock.py latte dr5 m12i
+# Ex: python fitmock.py agama dr3
+# Ex: python fitmock.py latte dr4
 
-gaiaRelease = 'dr3'
-datasetType = 'latte'  # 'latte' or 'agama'
+if len(sys.argv) < 3 or len(sys.argv) > 5:
+    print("Too few or too many command line arguments")
+    exit()
+else:
+    datasetType = sys.argv[1]
+    assert(datasetType in ['latte', 'agama'])
+
+    gaiaRelease = sys.argv[2]
+    assert(gaiaRelease in ['dr3', 'dr4', 'dr5'])
+    
+    if len(sys.argv) == 4:
+        assert(datasetType == 'latte')
+        lattesim = sys.argv[3]
+        assert(lattesim in ['m12f', 'm12i', 'm12m'])
+    elif datasetType == 'latte':
+        print("Defaulting to m12f")
+        lattesim = "m12f"
+    else:
+        lattesim = None
 
 if datasetType == 'agama':
     agama.setUnits(length=1, mass=1, velocity=1)
@@ -220,12 +191,8 @@ if datasetType == 'agama':
     l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat = loadMock(datasetType=datasetType, gaiaRelease=gaiaRelease, density=den, potential=pot, beta0=-0.5, r_a=60.0, nbody=30000)
     figs_path = f"agama_{gaiaRelease}_figs/"
 elif datasetType == 'latte':
-    lattesim = "m12f"
     l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat = loadMock(datasetType=datasetType, lattesim=lattesim, gaiaRelease=gaiaRelease)
     figs_path = f"latte_{lattesim}_{gaiaRelease}_figs/"
-else:
-    print("datasetType not understood")
-    exit(1)
 
 print('%i stars in the survey volume' % len(l))
 blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
