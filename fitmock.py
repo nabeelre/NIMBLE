@@ -29,38 +29,38 @@ d2r   = numpy.pi/180  # conversion from degrees to radians
 # DESI lower mag limit is 16? https://arxiv.org/pdf/2010.11284.pdf - says 16 in r mag
 
 
-# def cartesian_to_spherical(xpos, ypos, zpos, xVel, yVel, zVel):
-#     numParticles = len(xpos)
-#     sinTheta = numpy.zeros(numParticles)
-#     cosTheta = numpy.zeros(numParticles)
+def cartesian_to_spherical(xpos, ypos, zpos, xVel, yVel, zVel):
+    numParticles = len(xpos)
+    sinTheta = numpy.zeros(numParticles)
+    cosTheta = numpy.zeros(numParticles)
 
-#     sinPhi = numpy.zeros(numParticles)
-#     cosPhi = numpy.zeros(numParticles)
+    sinPhi = numpy.zeros(numParticles)
+    cosPhi = numpy.zeros(numParticles)
 
-#     for i in range(0, numParticles):
-#         sinTheta[i] = numpy.sqrt(xpos[i]**2 + ypos[i]**2) / numpy.sqrt(xpos[i]**2 + ypos[i]**2 + zpos[i]**2)
-#         cosTheta[i] = zpos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2 + zpos[i]**2)
-#         sinPhi[i] = ypos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2)
-#         cosPhi[i] = xpos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2)
+    for i in range(0, numParticles):
+        sinTheta[i] = numpy.sqrt(xpos[i]**2 + ypos[i]**2) / numpy.sqrt(xpos[i]**2 + ypos[i]**2 + zpos[i]**2)
+        cosTheta[i] = zpos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2 + zpos[i]**2)
+        sinPhi[i] = ypos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2)
+        cosPhi[i] = xpos[i] / numpy.sqrt(xpos[i]**2 + ypos[i]**2)
 
-#     rVel = numpy.zeros(numParticles)
-#     tVel = numpy.zeros(numParticles)
-#     pVel = numpy.zeros(numParticles)
+    rVel = numpy.zeros(numParticles)
+    tVel = numpy.zeros(numParticles)
+    pVel = numpy.zeros(numParticles)
 
-#     for i in range(0, numParticles):
-#         conversionMatrix = [[sinTheta[i] * cosPhi[i], sinTheta[i] * sinPhi[i],  cosTheta[i]],
-#                             [cosTheta[i] * cosPhi[i], cosTheta[i] * sinPhi[i], -sinTheta[i]],
-#                             [       -sinPhi[i]      ,        cosPhi[i]       ,        0    ]]
+    for i in range(0, numParticles):
+        conversionMatrix = [[sinTheta[i] * cosPhi[i], sinTheta[i] * sinPhi[i],  cosTheta[i]],
+                            [cosTheta[i] * cosPhi[i], cosTheta[i] * sinPhi[i], -sinTheta[i]],
+                            [       -sinPhi[i]      ,        cosPhi[i]       ,        0    ]]
 
-#         velMatrix = [ [xVel[i]], [yVel[i]], [zVel[i]] ]
+        velMatrix = [ [xVel[i]], [yVel[i]], [zVel[i]] ]
 
-#         sphereVels = numpy.matmul(conversionMatrix, velMatrix)
+        sphereVels = numpy.matmul(conversionMatrix, velMatrix)
 
-#         rVel[i] = sphereVels[0]
-#         tVel[i] = sphereVels[1]
-#         pVel[i] = sphereVels[2]
+        rVel[i] = sphereVels[0]
+        tVel[i] = sphereVels[1]
+        pVel[i] = sphereVels[2]
 
-#     return rVel, tVel, pVel
+    return rVel, tVel, pVel
 
 
 def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None, r_a=None, nbody=None, lattesim=None):
@@ -82,20 +82,11 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
         radii = numpy.sqrt(xv[:,0]**2 + xv[:,1]**2 + xv[:,2]**2)
 
         # rvel, tvel, pvel = cartesian_to_spherical(xv[:,0], xv[:,1], xv[:,2], xv[:,3], xv[:,4], xv[:,5])
-
-        # rvelsq = numpy.asarray([i**2 for i in rvel])
-        # tvelsq = numpy.asarray([i**2 for i in tvel])
-        # pvelsq = numpy.asarray([i**2 for i in pvel])
         
-        # true_sigmar    = agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(rvelsq)*0.5)
-        # true_sigmatheta2 = lambda lr: numpy.sqrt(agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(tvelsq))(lr))
-        # true_sigmaphi2   = lambda lr: numpy.sqrt(agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(pvelsq))(lr))
-        # true_sigmat     = lambda lr: (true_sigmaphi2(lr) + true_sigmatheta2(lr)) / 2
-
-        # plt.plot(rr, numpy.exp(true_sigmar2(numpy.log(rr))), c='r', linestyle='dashed')
-        # plt.plot(numpy.log(rr), true_sigmaphi2(numpy.log(rr)))
-        # plt.plot(numpy.log(rr), true_sigmatheta2(numpy.log(rr)))
-        # plt.plot(rr, numpy.exp(true_sigmat2(numpy.log(rr))), c='b', linestyle='dashed')
+        # true_sigmar2 = agama.splineApprox(numpy.log(rr), numpy.log(radii), rvel**2)
+        # true_sigmat2 = agama.splineApprox(numpy.log(rr), numpy.log(radii), (tvel**2 + pvel**2)/2)
+        # # plt.plot(rr, true_sigmar2(numpy.log(rr))**0.5, 'r--')
+        # plt.plot(rr, true_sigmat2(numpy.log(rr))**0.5, 'b--')
 
         # plt.plot(rr, numpy.exp(true_sigmar(numpy.log(rr))), c='r', linestyle='solid')
         # plt.plot(rr, numpy.exp(true_sigmat(numpy.log(rr))), c='b', linestyle='solid')
@@ -109,7 +100,6 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
         # formatted such that rows represent particles and columns represent different quantites
         # col 0-5: cartesian positions and velocities, col 6: particle mass, col 7: galactocentric spherical radius
         # col 8-10: square of spherical velocity components - r (radial), theta (polar), phi (azimuthal)
-        x, y, z, vx, vy, vz, mass, radii, rvelsq, tvelsq, pvelsq = numpy.loadtxt(f"latte/{lattesim}/{lattesim}_chem-1.5_full.csv", unpack=True, skiprows=1, delimiter=',')
         xv = numpy.column_stack((x, y, z, vx, vy, vz))
         nbody = len(x)
 
@@ -120,11 +110,9 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
         tvelsq = tvelsq[sorter]
         pvelsq = pvelsq[sorter]
 
-        true_sigmar     = agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(rvelsq)*0.5)
-        true_sigmatheta = lambda lr: numpy.sqrt(agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(tvelsq))(lr))
-        true_sigmaphi   = lambda lr: numpy.sqrt(agama.splineApprox(numpy.log(rr), numpy.log(radii), numpy.log(pvelsq))(lr))
-        true_sigmat     = lambda lr: (true_sigmaphi(lr) + true_sigmatheta(lr)) / 2
-
+        true_sigmar = agama.splineApprox(numpy.log(rr), numpy.log(radii), rvelsq)
+        true_sigmat = agama.splineApprox(numpy.log(rr), numpy.log(radii), (tvelsq + pvelsq)/2)
+        
     l,b,dist,pml,pmb,vlos = agama.getGalacticFromGalactocentric(*xv.T)
     ra, dec, pmra, pmdec  = agama.transformCelestialCoords(agama.fromGalactictoICRS, l, b, pml, pmb)
     l   /=d2r;  b   /=d2r   # convert from radians to degrees
@@ -262,7 +250,6 @@ if True:
     plt.xlabel('l')
     plt.ylabel('b')
     plt.savefig(figs_path+"sel_bounds.png", dpi=250)
-    plt.cla()
     plt.show()
 
 #fitDensityProfile(l, b, Gapp, pml, pmb, vlos, PMerr, vloserr)
@@ -324,7 +311,7 @@ if True:
     vloserr2_samp = numpy.repeat(vloserr, nsamples)**2
 
     # knots in Galactocentric radius (minimum is imposed by our cut |b|>30, maximum - by the extent of data)
-    knots_logr = numpy.linspace(numpy.log(5.0), numpy.log(80.0), 6)
+    knots_logr = numpy.linspace(numpy.log(7.0), numpy.log(80.0), 6)
 
     def modelDensity(params):
         # params is the array of logarithms of density at radial knots, which must monotonically decrease
@@ -463,8 +450,13 @@ if True:
         ax[0].legend(loc='upper right', frameon=False)
 
         # right panel: velocity dispersion profiles
-        ax[1].plot(r, numpy.exp(true_sigmar(lr)), 'r--', label='true $\sigma_\mathrm{rad}$')
-        ax[1].plot(r, numpy.exp(true_sigmat(lr)), 'b--', label='true $\sigma_\mathrm{tan}$')
+        if datasetType == 'agama':
+            ax[1].plot(r, numpy.exp(true_sigmar(lr)), 'r--', label='true $\sigma_\mathrm{rad}$')
+            ax[1].plot(r, numpy.exp(true_sigmat(lr)), 'b--', label='true $\sigma_\mathrm{tan}$')
+        elif datasetType == 'latte':
+            ax[1].plot(r, true_sigmar(lr)**0.5, 'r--', label='true $\sigma_\mathrm{rad}$')
+            ax[1].plot(r, true_sigmat(lr)**0.5, 'b--', label='true $\sigma_\mathrm{tan}$')
+
         # again collect the model profiles and plot median and 16/84 percentile confidence intervals
         results_r, results_t = numpy.zeros((2, len(chain), len(r)))
         for i in range(len(chain)):
