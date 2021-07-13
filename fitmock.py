@@ -16,7 +16,6 @@ decmin=-35.0   # min declination for the selection box (degrees)
 d2r   = numpy.pi/180  # conversion from degrees to radians
 
 # TO DO:
-# LSR information for latte datasets and coordinate rotations where necessary
 # test on indu.astro
 
 # Notes:
@@ -27,9 +26,106 @@ d2r   = numpy.pi/180  # conversion from degrees to radians
 # combine makeMock & readMock to reduce repeated code
 # DESI lower mag limit is 16? https://arxiv.org/pdf/2010.11284.pdf - says 16 in r mag
 # true sigma and density profiles for Latte datasets -> combine both tangential dispersions
+# LSR information for latte datasets and coordinate rotations where necessary
 
 
-def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None, r_a=None, nbody=None, lattesim=None):
+def rotate_x(x_old, y_old, theta):
+    return x_old*numpy.cos(theta) + y_old*numpy.sin(theta)
+
+
+def rotate_y(x_old, y_old, theta):
+    return -1*x_old*numpy.sin(theta) + y_old*numpy.cos(theta)
+
+
+def get_lsr_cartesian(sim, lsr):
+    if lsr == "LSR0":
+        x_sun = 0.000000
+        y_sun = 8.200000
+        z_sun = 0.000000
+        if sim == "m12f":
+            vx_sun = 226.184921
+            vy_sun = 14.377288
+            vz_sun = -4.890565
+        elif sim == "m12i":
+            vx_sun = 224.709198
+            vy_sun = -20.380102
+            vz_sun = 3.895417
+        elif sim == "m12m":
+            vx_sun = 254.918686
+            vy_sun = 16.790098
+            vz_sun = 1.964817
+        else:
+            print("Could not find simulation")
+            exit()
+    elif lsr == "LSR1":
+        x_sun = -7.101408
+        y_sun = -4.100000
+        z_sun = 0.000000
+        if sim == "m12f":
+            vx_sun = -114.035072
+            vy_sun = 208.726669
+            vz_sun = 5.063526
+        elif sim == "m12i":
+            vx_sun = -80.426880
+            vy_sun = 191.723969
+            vz_sun = 1.503948
+        elif sim == "m12m":
+            vx_sun = -128.247955
+            vy_sun = 221.148926
+            vz_sun = 5.850575
+        else:
+            print("Could not find simulation")
+            exit()
+    elif lsr == "LSR2":
+        x_sun = 7.101408
+        y_sun = -4.100000
+        z_sun = 0.000000
+        if sim == "m12f":
+            vx_sun = -118.143044
+            vy_sun = -187.763062
+            vz_sun = -3.890517
+        elif sim == "m12i":
+            vx_sun = -87.273514
+            vy_sun = -186.856659
+            vz_sun = -9.460751
+        elif sim == "m12m":
+            vx_sun = -106.620308
+            vy_sun = -232.205551
+            vz_sun = -6.418519
+        else:
+            print("Could not find simulation")
+            exit()
+    else:
+        print("Couldn't find lsr")
+        exit()
+    return x_sun, y_sun, z_sun, vx_sun, vy_sun, vz_sun
+
+
+def rotate_coords(sim, lsr, positions, velocities):
+    # positions and velocities are an Nx3 matricies with columns x, y, z and vx, vy, vz respectively
+    # all coordinates here are galactocentric cartesian
+    x_sun_orig, y_sun_orig, z_sun_orig, \
+        vx_sun_orig, vy_sun_orig , vz_sun_orig = get_lsr_cartesian(sim, lsr)
+
+    theta  = numpy.arctan2(y_sun_orig, x_sun_orig) + numpy.pi  # angle in radians to rotate to -x axis
+    x_sun  = rotate_x(x_sun_orig, y_sun_orig, theta)    # kpc
+    y_sun  = rotate_y(x_sun_orig, y_sun_orig, theta)    # kpc
+    vx_sun = rotate_x(vx_sun_orig, vy_sun_orig, theta)  # km/s
+    vy_sun = rotate_y(vx_sun_orig, vy_sun_orig, theta)  # km/s
+
+    galcen_v_sun_sim    = (vx_sun, vy_sun, vz_sun_orig)
+    galcen_distance_sim = numpy.sqrt(x_sun**2 + y_sun**2)
+    
+    x_new  = rotate_x(positions[:,0], positions[:,1], theta)
+    y_new  = rotate_y(positions[:,0], positions[:,1], theta)
+    vx_new = rotate_x(velocities[:,0], velocities[:,1], theta)
+    vy_new = rotate_y(velocities[:,0], velocities[:,1], theta)
+
+    return (galcen_distance_sim, galcen_v_sun_sim, z_sun_orig), \
+        x_new, y_new, vx_new, vy_new
+
+
+def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None, r_a=None, nbody=None, lattesim=None, lsr=None):
     rr = numpy.logspace(0, 2, 15)
     xyz= numpy.column_stack((rr, rr*0, rr*0))
     if datasetType == 'agama':
@@ -46,20 +142,28 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
         # represent sigma profiles as cubic splines for log(sigma) as a function of log(r)
         true_sigmar = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,0]**0.5))
         true_sigmat = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,1]**0.5))
+
+        # agama default values
+        lsr_info = (8.122, (12.9, 245.6, 7.78), 0.0208)
     elif datasetType == 'latte':
         # dataset for m12f available at https://drive.google.com/file/d/1Z8lQEdPeX1995WDJsc1qxeh07ZDLBZXr/view?usp=sharing
         # formatted such that rows represent particles and columns represent different quantites
         # col 0-5: cartesian positions and velocities, col 6: particle mass, col 7: galactocentric spherical radius
         # col 8-10: square of spherical velocity components - r (radial), theta (polar), phi (azimuthal)
-        x, y, z, vx, vy, vz, mass, radii, rvelsq, tvelsq, pvelsq = numpy.loadtxt(f"latte/{lattesim}/{lattesim}_chem-1.5_full.csv", unpack=True, skiprows=1, delimiter=',')
-        xv = numpy.column_stack((x, y, z, vx, vy, vz))
-        nbody = len(x)
+        x, y, z, vx, vy, vz, \
+            mass, radii, rvelsq, tvelsq, pvelsq = numpy.loadtxt(f"latte/{lattesim}/{lattesim}_chem-1.5_full.csv", 
+                                                                unpack=True, skiprows=1, delimiter=',')
+        lsr_info, x_new, y_new, vx_new, vy_new = rotate_coords(lattesim, lsr, 
+                                                               numpy.column_stack((x, y, z)), 
+                                                               numpy.column_stack((vx, vy, vz)))
 
-        # represent sigma profiles as cubic splines for log(sigma) as a function of log(r)
+        xv = numpy.column_stack((x_new, y_new, z, vx_new, vy_new, vz))
+        nbody = len(x_new)
+
         true_sigmar = agama.splineApprox(numpy.log(rr), numpy.log(radii), rvelsq)
         true_sigmat = agama.splineApprox(numpy.log(rr), numpy.log(radii), (tvelsq + pvelsq)/2)
         
-    l,b,dist,pml,pmb,vlos = agama.getGalacticFromGalactocentric(*xv.T)
+    l, b, dist, pml, pmb, vlos = agama.getGalacticFromGalactocentric(*xv.T, *lsr_info)
     ra, dec, pmra, pmdec  = agama.transformCelestialCoords(agama.fromGalactictoICRS, l, b, pml, pmb)
     l   /=d2r;  b   /=d2r   # convert from radians to degrees
     ra  /=d2r;  dec /=d2r
@@ -88,7 +192,8 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
     # go back to galactic coords
     ra *= d2r
     dec *= d2r
-    l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic, ra, dec, pmra, pmdec)
+    l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic, 
+                                                    ra, dec, pmra, pmdec)
     l /= d2r
     b /= d2r
 
@@ -96,8 +201,9 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
     vloserr = numpy.ones(nbody) * 2.0
     vlos += numpy.random.normal(size=nbody) * vloserr
 
-    return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt], vlos[filt], PMerr[filt], vloserr[filt],
-        true_sigmar, true_sigmat)
+    return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt], 
+            vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat, 
+            lsr_info)
 
 
 def getSurveyFootprintBoundary(decmin):
@@ -160,11 +266,13 @@ def getSurveyFootprintBoundary(decmin):
 # SECOND ARG: gaiaRelease, must be 'dr3', 'dr4', or 'dr5'
 # THIRD ARG (optional): lattesim, must be 'm12f', 'm12i', or 'm12m'
     # defaults to m12f, and exits when provided with agama datasetType
-# Ex: python fitmock.py latte dr5 m12i
+# FOURTH ARG (optional): lsr, must be 'LSR0', 'LSR1', or 'LSR2'
+    # defaults to LSR0, and exits when provided with agama datasetType
+# Ex: python fitmock.py latte dr5 m12i LSRR2
 # Ex: python fitmock.py agama dr3
 # Ex: python fitmock.py latte dr4
 
-if len(sys.argv) < 3 or len(sys.argv) > 5:
+if len(sys.argv) < 3 or len(sys.argv) > 6:
     print("Too few or too many command line arguments")
     exit()
 else:
@@ -174,25 +282,36 @@ else:
     gaiaRelease = sys.argv[2]
     assert(gaiaRelease in ['dr3', 'dr4', 'dr5'])
     
-    if len(sys.argv) == 4:
+    if len(sys.argv) >= 4:
         assert(datasetType == 'latte')
-        lattesim = sys.argv[3]
+        lattesim = sys.argv[3].lower()
         assert(lattesim in ['m12f', 'm12i', 'm12m'])
+        if len(sys.argv) == 5:
+            lsr = sys.argv[4].upper()
+            assert(lsr in ['LSR0', 'LSR1', 'LSR2'])
+        else:
+            print("Defaulting to LSR0")
+            lsr = "LSR0"
     elif datasetType == 'latte':
-        print("Defaulting to m12f")
+        print("Defaulting to m12f LSR0")
         lattesim = "m12f"
+        lsr = "LSR0"
     else:
         lattesim = None
+        lsr = None
 
 if datasetType == 'agama':
     agama.setUnits(length=1, mass=1, velocity=1)
     pot = agama.Potential(type='nfw', scaleradius=18, mass=1e12)    # a typical Milky Way-sized NFW halo
     den = agama.Density(type='spheroid', gamma=1, beta=5, scaleradius=20)   # some fiducial stellar halo profile
-    l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat = loadMock(datasetType=datasetType, gaiaRelease=gaiaRelease, density=den, potential=pot, beta0=-0.5, r_a=60.0, nbody=30000)
+    l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
+        lsr_info = loadMock(datasetType, gaiaRelease, density=den, potential=pot, 
+                            beta0=-0.5, r_a=60.0, nbody=30000)
     figs_path = f"agama_{gaiaRelease}_figs/"
 elif datasetType == 'latte':
-    l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat = loadMock(datasetType=datasetType, lattesim=lattesim, gaiaRelease=gaiaRelease)
-    figs_path = f"latte_{lattesim}_{gaiaRelease}_figs/"
+    l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
+        lsr_info = loadMock(datasetType, lattesim=lattesim, gaiaRelease=gaiaRelease, lsr=lsr)
+    figs_path = f"latte_{lattesim}_{lsr}_{gaiaRelease}_figs/"
 
 print('%i stars in the survey volume' % len(l))
 blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
@@ -231,7 +350,7 @@ if True:
     # unit conversion: degrees to radians for l,b,  mas/yr to km/s/kpc for PM
     dist_obs = 10**(0.2*(Gapp-Grrl)-2)
     x,y,z,vx,vy,vz = agama.getGalactocentricFromGalactic(
-        l * d2r, b * d2r, dist_obs, pml * 4.74, pmb * 4.74, vlos)    # coord rotation here
+        l*d2r, b*d2r, dist_obs, pml*4.74, pmb*4.74, vlos, *lsr_info)  # coord rotation here (?)
     logr_obs = 0.5 * numpy.log(x**2 + y**2 + z**2)
     vr_obs = (x*vx+y*vy+z*vz) / numpy.exp(logr_obs)
     vt_obs = (0.5 * (vx**2+vy**2+vz**2 - vr_obs**2))**0.5
@@ -241,7 +360,7 @@ if True:
     Gsamp = (numpy.random.normal(size=(npoints, nsamples)) * DMerr + Gapp[:,None]).reshape(-1)
     dist_samp = 10**(0.2*(Gsamp-Grrl)-2)
     x,y,z = agama.getGalactocentricFromGalactic(
-        numpy.repeat(l * d2r, nsamples), numpy.repeat(b * d2r, nsamples), dist_samp)
+        numpy.repeat(l * d2r, nsamples), numpy.repeat(b * d2r, nsamples), dist_samp, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2])
     R = (x**2 + y**2)**0.5
     r = (x**2 + y**2 + z**2)**0.5  # array of samples for Galactocentric radius
     logr_samp = numpy.log(r)
@@ -251,10 +370,10 @@ if True:
     # first compute the expected mean values (pml, pmb, vlos) for a star at rest at a given distance,
     # then repeat the exercise 3 times, setting one of velocity components (v_r, v_theta, v_phi)
     # to 1 km/s, and subtract from the zero-velocity projection.
-    vel0 = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x*0, y*0, z*0)[3:6])
-    velr = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x/r, y/r, z/r)[3:6]) - vel0
-    velt = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, z/r*x/R, z/r*y/R, -R/r)[3:6]) - vel0
-    velp = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, -y/R, x/R, 0*r)[3:6]) - vel0
+    vel0 = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x*0, y*0, z*0, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2])[3:6])
+    velr = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x/r, y/r, z/r, *lsr_info)[3:6]) - vel0
+    velt = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, z/r*x/R, z/r*y/R, -R/r, *lsr_info)[3:6]) - vel0
+    velp = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, -y/R, x/R, 0*r, *lsr_info)[3:6]) - vel0
 
     # matrix of shape (2, npoints*nsamples) describing how the two intrinsic velocity dispersions
     # in 3d Galactocentric coords translate to the line-of-sight velocity dispersion at each sample point
@@ -310,7 +429,7 @@ if True:
             lmaxb = 2*lsym - lminb
             l     = lminb + (lmaxb-lminb) * scaledl
             dist  = 10**(0.2*dm-2)
-            x,y,z = agama.getGalactocentricFromGalactic(l, b, dist)  # coord rotation here only positions
+            x,y,z = agama.getGalactocentricFromGalactic(l, b, dist, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2])  # coord rotation here only positions
             logr  = numpy.log(x**2 + y**2 + z**2) * 0.5
             jac   = dist**3 * numpy.log(10)/5 * (lmaxb-lminb)
             # multiplicative factor <= 1 accounting for a gradual decline in selection probability
