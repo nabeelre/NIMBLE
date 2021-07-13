@@ -17,6 +17,8 @@ d2r   = numpy.pi/180  # conversion from degrees to radians
 
 # TO DO:
 # test on indu.astro
+# improve plots
+# write jeans into this script
 
 # Notes:
 # Check to see what total_proper_motion_uncertainty is ... sum or average or something else?
@@ -115,7 +117,7 @@ def rotate_coords(sim, lsr, positions, velocities):
 
     galcen_v_sun_sim    = (vx_sun, vy_sun, vz_sun_orig)
     galcen_distance_sim = numpy.sqrt(x_sun**2 + y_sun**2)
-    
+
     x_new  = rotate_x(positions[:,0], positions[:,1], theta)
     y_new  = rotate_y(positions[:,0], positions[:,1], theta)
     vx_new = rotate_x(velocities[:,0], velocities[:,1], theta)
@@ -133,7 +135,7 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
         df = agama.DistributionFunction(type='quasispherical',
             density=density, potential=potential, beta0=beta0, r_a=r_a)
         gm = agama.GalaxyModel(potential, df)
-        
+
         # sample 6d points from the model (over the entire space)
         xv = gm.sample(nbody)[0]
         radii = numpy.sqrt(xv[:,0]**2 + xv[:,1]**2 + xv[:,2]**2)
@@ -151,10 +153,10 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
         # col 0-5: cartesian positions and velocities, col 6: particle mass, col 7: galactocentric spherical radius
         # col 8-10: square of spherical velocity components - r (radial), theta (polar), phi (azimuthal)
         x, y, z, vx, vy, vz, \
-            mass, radii, rvelsq, tvelsq, pvelsq = numpy.loadtxt(f"latte/{lattesim}/{lattesim}_chem-1.5_full.csv", 
+            mass, radii, rvelsq, tvelsq, pvelsq = numpy.loadtxt(f"latte/{lattesim}/{lattesim}_chem-1.5_full.csv",
                                                                 unpack=True, skiprows=1, delimiter=',')
-        lsr_info, x_new, y_new, vx_new, vy_new = rotate_coords(lattesim, lsr, 
-                                                               numpy.column_stack((x, y, z)), 
+        lsr_info, x_new, y_new, vx_new, vy_new = rotate_coords(lattesim, lsr,
+                                                               numpy.column_stack((x, y, z)),
                                                                numpy.column_stack((vx, vy, vz)))
 
         xv = numpy.column_stack((x_new, y_new, z, vx_new, vy_new, vz))
@@ -162,7 +164,7 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
 
         true_sigmar = agama.splineApprox(numpy.log(rr), numpy.log(radii), rvelsq)
         true_sigmat = agama.splineApprox(numpy.log(rr), numpy.log(radii), (tvelsq + pvelsq)/2)
-        
+
     l, b, dist, pml, pmb, vlos = agama.getGalacticFromGalactocentric(*xv.T, *lsr_info)
     ra, dec, pmra, pmdec  = agama.transformCelestialCoords(agama.fromGalactictoICRS, l, b, pml, pmb)
     l   /=d2r;  b   /=d2r   # convert from radians to degrees
@@ -192,7 +194,7 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
     # go back to galactic coords
     ra *= d2r
     dec *= d2r
-    l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic, 
+    l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
                                                     ra, dec, pmra, pmdec)
     l /= d2r
     b /= d2r
@@ -201,8 +203,8 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
     vloserr = numpy.ones(nbody) * 2.0
     vlos += numpy.random.normal(size=nbody) * vloserr
 
-    return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt], 
-            vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat, 
+    return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
+            vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat,
             lsr_info)
 
 
@@ -281,7 +283,7 @@ else:
 
     gaiaRelease = sys.argv[2]
     assert(gaiaRelease in ['dr3', 'dr4', 'dr5'])
-    
+
     if len(sys.argv) >= 4:
         assert(datasetType == 'latte')
         lattesim = sys.argv[3].lower()
@@ -305,7 +307,7 @@ if datasetType == 'agama':
     pot = agama.Potential(type='nfw', scaleradius=18, mass=1e12)    # a typical Milky Way-sized NFW halo
     den = agama.Density(type='spheroid', gamma=1, beta=5, scaleradius=20)   # some fiducial stellar halo profile
     l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
-        lsr_info = loadMock(datasetType, gaiaRelease, density=den, potential=pot, 
+        lsr_info = loadMock(datasetType, gaiaRelease, density=den, potential=pot,
                             beta0=-0.5, r_a=60.0, nbody=30000)
     figs_path = f"agama_{gaiaRelease}_figs/"
 elif datasetType == 'latte':
@@ -350,7 +352,7 @@ if True:
     # unit conversion: degrees to radians for l,b,  mas/yr to km/s/kpc for PM
     dist_obs = 10**(0.2*(Gapp-Grrl)-2)
     x,y,z,vx,vy,vz = agama.getGalactocentricFromGalactic(
-        l*d2r, b*d2r, dist_obs, pml*4.74, pmb*4.74, vlos, *lsr_info)  # coord rotation here (?)
+        l*d2r, b*d2r, dist_obs, pml*4.74, pmb*4.74, vlos, *lsr_info)
     logr_obs = 0.5 * numpy.log(x**2 + y**2 + z**2)
     vr_obs = (x*vx+y*vy+z*vz) / numpy.exp(logr_obs)
     vt_obs = (0.5 * (vx**2+vy**2+vz**2 - vr_obs**2))**0.5
@@ -370,7 +372,7 @@ if True:
     # first compute the expected mean values (pml, pmb, vlos) for a star at rest at a given distance,
     # then repeat the exercise 3 times, setting one of velocity components (v_r, v_theta, v_phi)
     # to 1 km/s, and subtract from the zero-velocity projection.
-    vel0 = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x*0, y*0, z*0, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2])[3:6])
+    vel0 = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x*0, y*0, z*0, *lsr_info)[3:6])
     velr = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x/r, y/r, z/r, *lsr_info)[3:6]) - vel0
     velt = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, z/r*x/R, z/r*y/R, -R/r, *lsr_info)[3:6]) - vel0
     velp = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, -y/R, x/R, 0*r, *lsr_info)[3:6]) - vel0
@@ -429,7 +431,7 @@ if True:
             lmaxb = 2*lsym - lminb
             l     = lminb + (lmaxb-lminb) * scaledl
             dist  = 10**(0.2*dm-2)
-            x,y,z = agama.getGalactocentricFromGalactic(l, b, dist, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2])  # coord rotation here only positions
+            x,y,z = agama.getGalactocentricFromGalactic(l, b, dist, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2])
             logr  = numpy.log(x**2 + y**2 + z**2) * 0.5
             jac   = dist**3 * numpy.log(10)/5 * (lmaxb-lminb)
             # multiplicative factor <= 1 accounting for a gradual decline in selection probability
@@ -598,7 +600,7 @@ if True:
 
     # show profiles and wait for the user to marvel at them
     plotprofiles(params.reshape(1,-1), "preMCMC")
-    
+
     # then start a MCMC around the best-fit params
     paramdisp= numpy.ones(len(params))*0.1  # spread of initial walkers around best-fit params
     nwalkers = 2*len(params)   # minimum possible number of walkers in emcee
