@@ -16,9 +16,9 @@ decmin=-35.0   # min declination for the selection box (degrees)
 d2r   = numpy.pi/180  # conversion from degrees to radians
 
 # TO DO:
-# test on indu.astro
 # improve plots
 # write jeans into this script
+# test on indu.astro
 
 # Notes:
 # Check to see what total_proper_motion_uncertainty is ... sum or average or something else?
@@ -325,6 +325,7 @@ if not os.path.exists(figs_path):
 # diagnostic plot showing the stars in l,b and the selection region boundary
 if True:
     plt.scatter(l, b, s=2, c=Gapp, cmap='hell', vmin=Gmin, vmax=Gmax+1, edgecolors='none')
+    plt.colorbar(label='Gapp')
     if blow <= -bmin*d2r:  # selection region in the southern Galactic hemisphere
         bb=numpy.linspace(blow, -bmin*d2r, 100)
         l1=lmin(bb)
@@ -335,8 +336,9 @@ if True:
         l1=lmin(bb)
         l2=2*lsym-l1
         plt.plot(numpy.hstack((l1, l2[::-1], l1[0])) / d2r, numpy.hstack((bb, bb[::-1], bb[0])) / d2r, 'g')
-    plt.xlabel('l')
-    plt.ylabel('b')
+    plt.xlabel('galactic longitude l (degrees)')
+    plt.ylabel('galactic latitude b (degrees)')
+    plt.tight_layout()
     plt.savefig(figs_path+"sel_bounds.png", dpi=250)
     plt.show()
 
@@ -502,9 +504,12 @@ if True:
             print("%s => %s" % (params, ex))
             return -numpy.inf
 
-    def plotprofiles(chain, plotname="a"):
-        ax = plt.subplots(1, 2, figsize=(10,5))[1]
-        # left panel: density profiles
+    def plotprofiles(chain, plotname=''):
+        # Density plots
+        fig = plt.figure(figsize=(7,7))
+        gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
+        axs = gs.subplots(sharex=True)
+        
         r  = numpy.logspace(0, 2, 41)
         lr = numpy.log(r)
         if datasetType == 'agama':
@@ -514,61 +519,110 @@ if True:
             trueparams_dens = numpy.log((numpy.exp(S(knots_logr))) / (4.0 * numpy.pi * (numpy.exp(knots_logr)**3)))
         trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]  # set the first element of array to zero and exclude it
         truedens = numpy.exp(modelDensity(trueparams_dens)(lr))
-        ax[0].plot(r, truedens, 'k--', label='true density')
+        
+        # main plot
+        axs[0].plot(r, truedens, 'k--', label='true density')
         # retrieve density profiles of each model in the chain, and compute median and 16/84 percentiles
         results = numpy.zeros((len(chain), len(r)))
         for i in range(len(chain)):
             results[i] = numpy.exp(modelDensity(chain[i, 0:len(knots_logr)-1])(lr))
         low, med, upp = numpy.percentile(results, [16,50,84], axis=0)
         # plot the model profiles with 1sigma confidence intervals
-        ax[0].fill_between(r, low, upp, alpha=0.3, lw=0, color='r')
-        ax[0].plot(r, med, color='r', label='fit density')
-        # construct the histogram of observed galactocentric distances of all stars in the sample
-        # (blurred by distance errors and affected by spatial selection function)
-        # dN/d(ln r) = 4pi r^3 rho
+        axs[0].fill_between(r, low, upp, alpha=0.3, lw=0, color='r')
+        axs[0].plot(r, med, color='r', label='fit density')
         count_obs = numpy.histogram(logr_obs, bins=lr)[0]
         rho_obs = count_obs / (4 * numpy.pi * (lr[1:]-lr[:-1]) * (r[1:]*r[:-1])**1.5 * len(Gapp))
-        ax[0].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(rho_obs, 2), 'b', label='actual dataset')
-        ax[0].set_xlabel('Galactocentric radius')
-        ax[0].set_ylabel('3d density of tracers')
-        ax[0].set_xscale('log')
-        ax[0].set_yscale('log')
-        ax[0].set_xlim(min(r), max(r))
-        ax[0].set_ylim(min(truedens)*0.2, max(truedens)*2)
-        ax[0].legend(loc='upper right', frameon=False)
-
-        # right panel: velocity dispersion profiles
-        if datasetType == 'agama':
-            ax[1].plot(r, numpy.exp(true_sigmar(lr)), 'r--', label='true $\sigma_\mathrm{rad}$')
-            ax[1].plot(r, numpy.exp(true_sigmat(lr)), 'b--', label='true $\sigma_\mathrm{tan}$')
-        elif datasetType == 'latte':
-            ax[1].plot(r, true_sigmar(lr)**0.5, 'r--', label='true $\sigma_\mathrm{rad}$')
-            ax[1].plot(r, true_sigmat(lr)**0.5, 'b--', label='true $\sigma_\mathrm{tan}$')
+        axs[0].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(rho_obs, 2), 'b', label='actual dataset')
+        
+        axs[0].set_ylabel('3d density of tracers')
+        axs[0].set_yscale('log')
+        axs[0].set_xlim(min(r), max(r))
+        axs[0].set_ylim(min(truedens)*0.2, max(truedens)*2)
+        axs[0].legend(loc='upper right', frameon=False)
+        
+        # percent error
+        percerr = 100*((med - truedens) / truedens)
+        lowerr = 100*((low - truedens) / truedens)
+        upperr = 100*((upp - truedens) / truedens)
+        axs[1].plot(r, percerr, 'g')
+        axs[1].fill_between(r, lowerr, upperr, alpha=0.3, lw=0, color='g')
+        axs[1].axhline(0, c='gray', linestyle='dashed')
+        axs[1].set_ylim(-55,55)
+        
+        axs[1].set_xlabel('Galactocentric radius (kpc)')
+        axs[1].set_ylabel('percent error (%)')
+        axs[1].set_xscale('log')
+        
+        plt.tight_layout()
+        plt.savefig(figs_path+plotname+'_dens.jpg', dpi=300)
+        plt.show()
+        
+        # Sigma plots
+        fig = plt.figure(figsize=(12,7))
+        gs = fig.add_gridspec(2,2, hspace=0, wspace=0, height_ratios=[3, 1], width_ratios=[1,1])
+        axs = gs.subplots(sharex=True)
+        axs[0,0].text(x=45, y=470, s='Radial', size=18)
+        axs[0,1].text(x=45, y=470, s='Tangential', size=18)
 
         # again collect the model profiles and plot median and 16/84 percentile confidence intervals
         results_r, results_t = numpy.zeros((2, len(chain), len(r)))
         for i in range(len(chain)):
             results_r[i] = numpy.exp(modelSigma(chain[i, len(knots_logr)-1 : 2*len(knots_logr)-1])(lr))
             results_t[i] = numpy.exp(modelSigma(chain[i, 2*len(knots_logr)-1 :])(lr))
-        low, med, upp = numpy.percentile(results_r, [16,50,84], axis=0)
-        ax[1].fill_between(r, low, upp, alpha=0.3, lw=0, color='m')
-        ax[1].plot(r, med, color='m', label='fit $\sigma_\mathrm{rad}$')
-        low, med, upp = numpy.percentile(results_t, [16,50,84], axis=0)
-        ax[1].fill_between(r, low, upp, alpha=0.3, lw=0, color='c')
-        ax[1].plot(r, med, color='c', label='fit $\sigma_\mathrm{tan}$')
+        low_r, med_r, upp_r = numpy.percentile(results_r, [16,50,84], axis=0)
+        axs[0,0].fill_between(r, low_r, upp_r, alpha=0.3, lw=0, color='r')
+        axs[0,0].plot(r, med_r, color='r', label='fit $\sigma_\mathrm{rad}$')
+        low_t, med_t, upp_t = numpy.percentile(results_t, [16,50,84], axis=0)
+        axs[0,1].fill_between(r, low_t, upp_t, alpha=0.3, lw=0, color='r')
+        axs[0,1].plot(r, med_t, color='r', label='fit $\sigma_\mathrm{tan}$')
+        
+        if datasetType == 'agama':
+            truesigr = numpy.exp(true_sigmar(lr))
+            truesigt = numpy.exp(true_sigmat(lr))
+        elif datasetType == 'latte':
+            truesigr = true_sigmar(lr)**0.5
+            truesigt = true_sigmat(lr)**0.5
+        axs[0,0].plot(r, truesigr, 'k--', label='true $\sigma_\mathrm{rad}$')
+        axs[0,1].plot(r, truesigt, 'k--', label='true $\sigma_\mathrm{tan}$')
+        
+        percerr_r = 100*((med_r - truesigr) / truesigr)
+        lowerr_r = 100*((low_r - truesigr) / truesigr)
+        upperr_r = 100*((upp_r - truesigr) / truesigr)
+        axs[1,0].plot(r, percerr_r, c='g')
+        axs[1,0].axhline(0, c='gray', linestyle='dashed')
+        axs[1,0].fill_between(r, lowerr_r, upperr_r, alpha=0.3, lw=0, color='g')
+        percerr_t = 100*((med_t - truesigt) / truesigt)
+        lowerr_t = 100*((low_t - truesigt) / truesigt)
+        upperr_t = 100*((upp_t - truesigt) / truesigt)
+        axs[1,1].plot(r, percerr_t, c='g')
+        axs[1,1].axhline(0, c='gray', linestyle='dashed')
+        axs[1,1].fill_between(r, lowerr_t, upperr_t, alpha=0.3, lw=0, color='g')
+        
         # and plot the observed radial/tangential dispersions, which are affected by distance errors
         # and broadened by PM errors (especially the tangential dispersion)
         sigmar_obs = (numpy.histogram(logr_obs, bins=lr, weights=vr_obs**2)[0] / count_obs)**0.5
         sigmat_obs = (numpy.histogram(logr_obs, bins=lr, weights=vt_obs**2)[0] / count_obs)**0.5
-        ax[1].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(sigmar_obs, 2), 'm', label='actual dataset $\sigma_\mathrm{rad}$')
-        ax[1].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(sigmat_obs, 2), 'c', label='actual dataset $\sigma_\mathrm{tan}$')
-        ax[1].set_xlabel('Galactocentric radius')
-        ax[1].set_ylabel('velocity dispersion of tracers')
-        ax[1].set_xscale('log')
-        ax[1].legend(loc='upper left', frameon=False)
+        axs[0,0].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(sigmar_obs, 2), 'b', label='actual dataset $\sigma_\mathrm{rad}$', alpha=0.3)
+        axs[0,1].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(sigmat_obs, 2), 'b', label='actual dataset $\sigma_\mathrm{tan}$', alpha=0.3)
 
+        #upper_bound = max(numpy.hstack((upp_r, upp_t, sigmar_obs, sigmat_obs, truesigr, truesigt)))*1.1
+        axs[0,0].set_ylim(-20,500)
+        axs[0,1].set_ylim(-20,500)
+        axs[0,1].set_yticklabels([])
+        axs[1,0].set_ylim(-55,55)
+        axs[1,1].set_ylim(-55,55)
+        axs[1,1].set_yticklabels([])
+        
+        axs[0,0].set_xlim(min(r), max(r))
+        axs[1,0].set_xlabel('Galactocentric radius (kpc)')
+        axs[1,1].set_xlabel('Galactocentric radius (kpc)')
+        axs[0,0].set_ylabel('velocity dispersion of tracers')
+        axs[1,0].set_ylabel('percent error (%)')
+        axs[0,0].legend(loc='upper left', frameon=False)
+        axs[0,1].legend(loc='upper left', frameon=False)
+        
         plt.tight_layout()
-        plt.savefig(figs_path+plotname+".png", dpi=250)
+        plt.savefig(figs_path+plotname+'_sigs.jpg', dpi=300)
         plt.show()
 
     # initial values of parameters
@@ -642,10 +696,10 @@ if True:
             # 1. evolution of parameters along the chain for each walker
             axes = plt.subplots(len(params)+1, 1, sharex=True, figsize=(10,10))[1]
             for i in range(len(params)):
-                axes[i].plot(sampler.chain[:,:,i].T, color='k', alpha=0.5)
+                axes[i].plot(sampler.chain[:,:,i].T, color='k', alpha=0.3)
                 axes[i].set_xticklabels([])
                 axes[i].set_ylabel(paramnames[i])
-            axes[-1].plot(sampler.lnprobability.T, color='k', alpha=0.5)
+            axes[-1].plot(sampler.lnprobability.T, color='k', alpha=0.3)
             axes[-1].set_ylabel('likelihood')   # bottom panel is the evolution of likelihood
             axes[-1].set_ylim(maxloglike-3*len(params), maxloglike)
             plt.tight_layout(h_pad=0)

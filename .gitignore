@@ -1,3 +1,4 @@
 .DS_Store
 latte/
 *figs/
+.ipynb_checkpoints/
