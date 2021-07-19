@@ -16,9 +16,8 @@ decmin=-35.0   # min declination for the selection box (degrees)
 d2r   = numpy.pi/180  # conversion from degrees to radians
 
 # TO DO:
-# improve plots
-# write jeans into this script
 # test on indu.astro
+# code true profiles for agama
 
 # Notes:
 # Check to see what total_proper_motion_uncertainty is ... sum or average or something else?
@@ -29,6 +28,10 @@ d2r   = numpy.pi/180  # conversion from degrees to radians
 # DESI lower mag limit is 16? https://arxiv.org/pdf/2010.11284.pdf - says 16 in r mag
 # true sigma and density profiles for Latte datasets -> combine both tangential dispersions
 # LSR information for latte datasets and coordinate rotations where necessary
+# improve plots
+# write jeans into this script
+# doing true profiles wrong? 
+    # I'm using only the metal poor star particles to make them, should i use all star particles
 
 
 def rotate_x(x_old, y_old, theta):
@@ -714,4 +717,109 @@ if True:
             if not converged: plotprofiles(chain[::20], "MCMC_iter"+str(iter))
             iter += 1
     print("MCMC run time:", time.time()-start)
+    plt.show()
+
+    # now, plug resulting density and sigma profiles into the jeans equation
+    # one mass profile for each trial of MCMC - do percentiles to get band on mass profile
+
+    # M = (-sigr^2 * r / G) * (a + b + c)
+    # a = dlnrho/dlnr
+    # b = dlnsigr^2/dlnr
+    # c = 2beta
+    # beta = 1-(sigt/sigr)^2
+
+    def frac_error(r_est, r_true, M_est, M_true):
+        frac_error = numpy.zeros(len(r_est))
+        
+        for i in range(len(r_est)):
+            match_idx = (numpy.abs(r_true - r_est[i])).argmin()
+            frac_error[i] = (M_est[i]-M_true[match_idx])/M_true[match_idx]
+        return frac_error
+
+    if datasetType == 'latte':
+        r_true, M_true = numpy.loadtxt(fname=f"latte/{lattesim}/{lattesim}_smpl.csv", 
+                                       delimiter=',', skiprows=1, unpack=True)
+    elif datasetType == 'agama':
+        r_true, M_true = numpy.loadtxt(fname="latte/m12f/m12f_smpl.csv", 
+                                       delimiter=',', skiprows=1, unpack=True)
+
+    chain_smpl = chain[::20]
+
+    r  = numpy.logspace(0, 2, 201)
+    lr = numpy.log(r)
+    G = 4.3e-6  # (kpc km2) / (s2 Msun)
+
+    dlnrho, dlnsigr, sigr, sigt = numpy.zeros((4, len(chain_smpl), len(r)))
+    for i in range(len(chain_smpl)):
+        dlnrho [i] = modelDensity(chain_smpl[i, 0:len(knots_logr)-1])(lr, der=1)
+        dlnsigr[i] = modelSigma(chain_smpl[i, len(knots_logr)-1 : 2*len(knots_logr)-1])(lr, der=1)
+        sigr   [i] = numpy.exp(modelSigma(chain_smpl[i, len(knots_logr)-1 : 2*len(knots_logr)-1])(lr))
+        sigt   [i] = numpy.exp(modelSigma(chain_smpl[i, 2*len(knots_logr)-1 :])(lr))
+
+    # dlnrho_low, dlnrho_med, dlnrho_upp = numpy.percentile(dlnrho, [16,50,84], axis=0)
+    # dlnsigr_low, dlnsigr_med, dlnsigr_upp = numpy.percentile(dlnsigr, [16,50,84], axis=0)
+    # sigr_low, sigr_med, sigr_upp = numpy.percentile(sigr, [16,50,84], axis=0)
+    # sigt_low, sigt_med, sigt_upp = numpy.percentile(sigt, [16,50,84], axis=0)
+    # beta_low = 1 - (sigt_low**2 / sigr_low**2)
+    # beta_med = 1 - (sigt_med**2 / sigr_med**2)
+    # beta_upp = 1 - (sigt_upp**2 / sigr_upp**2)
+    # M_enc = -(sigr_med**2 * r / G)*(dlnrho_med + dlnsigr_med*2 + 2*beta_med)
+
+    Mencs, betas = numpy.zeros((2, len(chain_smpl), len(r)))
+    for i in range(len(chain_smpl)):
+        betas[i] = 1 - (sigt[i]**2 / sigr[i]**2)
+        Mencs[i] = -(sigr[i]**2 * r / G)*(dlnrho[i] + 2*dlnsigr[i] + 2*betas[i])
+    #     plt.plot(r, M_encs[i])
+        
+    Menc_low, Menc_med, Menc_upp = numpy.percentile(Mencs, [16,50,84], axis=0)
+
+    # improve plot, why is it part of the corner plot?
+    # plt.plot(r, Menc_med)
+    # plt.fill_between(r, Menc_low, Menc_upp, alpha=0.3)
+    # plt.plot(r_true, M_true, 'k--')
+    # plt.xlim([0,110])
+    # plt.ylim([0,1e12])
+    # plt.savefig("massenclosed.jpg", dpi=250)
+    # plt.show()
+
+    plt.rcParams.update({'font.size': 18})
+    fig = plt.figure(figsize=(15,10), dpi=250)
+    gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
+    axs = gs.subplots(sharex=True)
+    colors = {'m12f': '#4a0078', 'm12i': '#157F1F', 'm12m': '#931621', None: 'red'}
+    color = colors[lattesim]
+
+    axs[0].plot(r, Menc_med, c=color, linewidth=2.5, label='Jeans estimate')
+    axs[0].fill_between(r, Menc_low, Menc_upp, color=color, alpha=0.3, lw=0, label=r'$\pm1\sigma$ interval')
+    
+    axs[0].plot(r_true, M_true, c='k', linewidth=1.5, linestyle='dashed', label='True')
+    
+    axs[1].plot(r, frac_error(r, r_true, Menc_med, M_true), c=color, linewidth=2.0)
+    axs[1].fill_between(r, frac_error(r, r_true, Menc_low, M_true), 
+                        frac_error(r, r_true, Menc_upp, M_true), color=color, 
+                        alpha=0.3, lw=0)
+
+    descrip = ""
+    if datasetType == 'latte':
+        descrip = f"{datasetType} {lattesim} {lsr} {gaiaRelease}"
+    else:
+        descrip = f"{datasetType} {gaiaRelease}"
+
+    axs[0].set_title(descrip)
+    axs[1].axhline(0, c='k', linewidth=1)
+    axs[1].axhline(0.2, c='k', linewidth=0.5, linestyle='dotted')
+    axs[1].axhline(-0.2, c='k', linewidth=0.5, linestyle='dotted')
+    axs[1].set_xlim([0,110])
+    axs[0].set_ylabel(r"M(<r) ($M_{\odot}$)", size=24)
+    axs[1].set_xlabel('Galactocentric Radius (kpc)', size=24)
+    axs[1].set_ylabel('Fractional Error', size=20)
+    axs[0].legend()
+    axs[1].set_ylim([-0.40, 0.40])
+    axs[1].set_yticks([-0.2, 0, 0.2])
+
+    for ax in axs:
+        ax.label_outer()
+
+    plt.tight_layout()
+    plt.savefig(figs_path+'jeans_result.jpg', dpi=250)
     plt.show()
