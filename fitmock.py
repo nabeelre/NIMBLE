@@ -518,7 +518,7 @@ if True:
         if datasetType == 'agama':
             trueparams_dens = numpy.log(den.density(numpy.column_stack((numpy.exp(knots_logr), knots_logr*0, knots_logr*0))))
         if datasetType == 'latte':
-            S = agama.splineLogDensity(knots_logr, x=numpy.log(radii), w=numpy.ones(len(radii)))
+            S = agama.splineLogDensity(knots_logr, x=numpy.log(radii), w=numpy.ones(len(radii)), infLeft=True, infRight=True)
             trueparams_dens = numpy.log((numpy.exp(S(knots_logr))) / (4.0 * numpy.pi * (numpy.exp(knots_logr)**3)))
         trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]  # set the first element of array to zero and exclude it
         truedens = numpy.exp(modelDensity(trueparams_dens)(lr))
@@ -728,6 +728,10 @@ if True:
     # c = 2beta
     # beta = 1-(sigt/sigr)^2
 
+    r  = numpy.logspace(0, 2, 201)
+    lr = numpy.log(r)
+    G = 4.3e-6  # (kpc km2) / (s2 Msun)
+
     def frac_error(r_est, r_true, M_est, M_true):
         frac_error = numpy.zeros(len(r_est))
         
@@ -740,14 +744,12 @@ if True:
         r_true, M_true = numpy.loadtxt(fname=f"latte/{lattesim}/{lattesim}_smpl.csv", 
                                        delimiter=',', skiprows=1, unpack=True)
     elif datasetType == 'agama':
-        r_true, M_true = numpy.loadtxt(fname="latte/m12f/m12f_smpl.csv", 
-                                       delimiter=',', skiprows=1, unpack=True)
+        r_true = r
+        M_true = numpy.zeros(len(r))
+        for i in range(len(r)):
+            M_true[i] = pot.totalMass(r[i])
 
     chain_smpl = chain[::20]
-
-    r  = numpy.logspace(0, 2, 201)
-    lr = numpy.log(r)
-    G = 4.3e-6  # (kpc km2) / (s2 Msun)
 
     dlnrho, dlnsigr, sigr, sigt = numpy.zeros((4, len(chain_smpl), len(r)))
     for i in range(len(chain_smpl)):
@@ -770,19 +772,26 @@ if True:
         betas[i] = 1 - (sigt[i]**2 / sigr[i]**2)
         Mencs[i] = -(sigr[i]**2 * r / G)*(dlnrho[i] + 2*dlnsigr[i] + 2*betas[i])
     #     plt.plot(r, M_encs[i])
-        
     Menc_low, Menc_med, Menc_upp = numpy.percentile(Mencs, [16,50,84], axis=0)
+    beta_low, beta_med, beta_upp = numpy.percentile(betas, [16,50,84], axis=0)
 
-    # improve plot, why is it part of the corner plot?
-    # plt.plot(r, Menc_med)
-    # plt.fill_between(r, Menc_low, Menc_upp, alpha=0.3)
-    # plt.plot(r_true, M_true, 'k--')
-    # plt.xlim([0,110])
-    # plt.ylim([0,1e12])
-    # plt.savefig("massenclosed.jpg", dpi=250)
-    # plt.show()
+    # Anisotropy plot
+    fig = plt.figure(figsize=(7,7))
+    plt.plot(r, beta_med, label=r"$\beta$")
+    plt.fill_between(r, beta_low, beta_upp, alpha=0.3, label=r'$\pm1\sigma$ interval')
+    plt.axhline(0, c='k', label=r"$\beta=0$")
+    plt.xlabel('Galactocentric radius (kpc)')
+    plt.ylabel(r"Anisotropy ($\beta$)", fontsize=18)
+    plt.ylim([-1.0, 1.0])
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(figs_path+'anisotropy.jpg', dpi=250)
+    plt.show()
+    plt.cla()
 
+    # Mass enclosed plot
     plt.rcParams.update({'font.size': 18})
+    plt.rcParams['agg.path.chunksize'] = 10000  # overflow error on line 835 without this
     fig = plt.figure(figsize=(15,10), dpi=250)
     gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
     axs = gs.subplots(sharex=True)
