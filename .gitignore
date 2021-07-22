@@ -2,3 +2,4 @@
 latte/
 *figs/
 .ipynb_checkpoints/
+*.sh

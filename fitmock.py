@@ -203,7 +203,7 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
     b /= d2r
 
     # add Vlos errors
-    vloserr = numpy.ones(nbody) * 2.0
+    vloserr = numpy.ones(nbody) * (10.0 if LARGEVLOS else 2.0)
     vlos += numpy.random.normal(size=nbody) * vloserr
 
     return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
@@ -266,17 +266,7 @@ def getSurveyFootprintBoundary(decmin):
     else:  # excluded a region outside a closed loop around North pole; b must be between b1 and b2
         return b1, b2, lambda b: curve(b, ext=lp[1]), lp[1]
 
-# HOW TO RUN SCRIPT
-# FIRST ARG: datasetType, must be 'latte' or 'agama'
-# SECOND ARG: gaiaRelease, must be 'dr3', 'dr4', or 'dr5'
-# THIRD ARG (optional): lattesim, must be 'm12f', 'm12i', or 'm12m'
-    # defaults to m12f, and exits when provided with agama datasetType
-# FOURTH ARG (optional): lsr, must be 'LSR0', 'LSR1', or 'LSR2'
-    # defaults to LSR0, and exits when provided with agama datasetType
-# Ex: python fitmock.py latte dr5 m12i LSRR2
-# Ex: python fitmock.py agama dr3
-# Ex: python fitmock.py latte dr4
-
+LARGEVLOS = False
 if len(sys.argv) < 3 or len(sys.argv) > 6:
     print("Too few or too many command line arguments")
     exit()
@@ -284,27 +274,32 @@ else:
     datasetType = sys.argv[1]
     assert(datasetType in ['latte', 'agama'])
 
-    gaiaRelease = sys.argv[2]
-    assert(gaiaRelease in ['dr3', 'dr4', 'dr5'])
-
-    if len(sys.argv) >= 4:
-        assert(datasetType == 'latte')
-        lattesim = sys.argv[3].lower()
-        assert(lattesim in ['m12f', 'm12i', 'm12m'])
-        if len(sys.argv) == 5:
-            lsr = sys.argv[4].upper()
-            assert(lsr in ['LSR0', 'LSR1', 'LSR2'])
-        else:
-            print("Defaulting to LSR0")
-            lsr = "LSR0"
-    elif datasetType == 'latte':
-        print("Defaulting to m12f LSR0")
-        lattesim = "m12f"
-        lsr = "LSR0"
-    else:
+    if datasetType == 'agama':
+        assert(len(sys.argv) == 3 or len(sys.argv) == 4)
+        gaiaRelease = sys.argv[2]
         lattesim = None
         lsr = None
+        if len(sys.argv) == 4:
+            if sys.argv[3] == 'largevlos':
+                LARGEVLOS = True
+        print(f"RUNNING AGAMA {gaiaRelease} {'with large Vlos errors' if LARGEVLOS else ''}")
+    elif datasetType == 'latte':
+        assert(len(sys.argv) == 5 or len(sys.argv) == 6)
+        lattesim = sys.argv[2].lower()
+        lsr = sys.argv[3].upper()
+        gaiaRelease = sys.argv[4]
+        if len(sys.argv) == 6:
+            if sys.argv[3] == 'largevlos':
+                LARGEVLOS = True
+        print(f"RUNNING LATTE {lattesim} {lsr} {gaiaRelease} {'with large Vlos errors' if LARGEVLOS else ''}")
+    else:
+        print("Unrecognized datasetType")
+        exit()
 
+    assert(gaiaRelease in ['dr3', 'dr4', 'dr5'])
+    assert(lattesim in ['m12f', 'm12i', 'm12m', None])
+    assert(lsr in ['LSR0', 'LSR1', 'LSR2', None])
+        
 if datasetType == 'agama':
     agama.setUnits(length=1, mass=1, velocity=1)
     pot = agama.Potential(type='nfw', scaleradius=18, mass=1e12)    # a typical Milky Way-sized NFW halo
@@ -320,6 +315,10 @@ elif datasetType == 'latte':
 
 print('%i stars in the survey volume' % len(l))
 blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
+
+# vlos temp
+if LARGEVLOS:
+    figs_path += "vlos/"
 
 if not os.path.exists(figs_path):
     os.makedirs(figs_path)
@@ -339,6 +338,7 @@ if True:
         l1=lmin(bb)
         l2=2*lsym-l1
         plt.plot(numpy.hstack((l1, l2[::-1], l1[0])) / d2r, numpy.hstack((bb, bb[::-1], bb[0])) / d2r, 'g')
+    plt.title(figs_path)
     plt.xlabel('galactic longitude l (degrees)')
     plt.ylabel('galactic latitude b (degrees)')
     plt.tight_layout()
@@ -537,6 +537,7 @@ if True:
         rho_obs = count_obs / (4 * numpy.pi * (lr[1:]-lr[:-1]) * (r[1:]*r[:-1])**1.5 * len(Gapp))
         axs[0].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(rho_obs, 2), 'b', label='actual dataset')
         
+        axs[0].set_title(figs_path)
         axs[0].set_ylabel('3d density of tracers')
         axs[0].set_yscale('log')
         axs[0].set_xlim(min(r), max(r))
@@ -617,6 +618,7 @@ if True:
         axs[1,1].set_yticklabels([])
         
         axs[0,0].set_xlim(min(r), max(r))
+        axs[0,0].set_title(figs_path)
         axs[1,0].set_xlabel('Galactocentric radius (kpc)')
         axs[1,1].set_xlabel('Galactocentric radius (kpc)')
         axs[0,0].set_ylabel('velocity dispersion of tracers')
@@ -702,6 +704,7 @@ if True:
                 axes[i].plot(sampler.chain[:,:,i].T, color='k', alpha=0.3)
                 axes[i].set_xticklabels([])
                 axes[i].set_ylabel(paramnames[i])
+            axes[0].set_title(figs_path)
             axes[-1].plot(sampler.lnprobability.T, color='k', alpha=0.3)
             axes[-1].set_ylabel('likelihood')   # bottom panel is the evolution of likelihood
             axes[-1].set_ylim(maxloglike-3*len(params), maxloglike)
@@ -711,6 +714,7 @@ if True:
             plt.show()
             # 2. corner plot - covariances of all parameters
             corner.corner(chain, quantiles=[0.16, 0.5, 0.84], labels=paramnames, show_titles=True)
+            plt.title(figs_path)
             plt.savefig(figs_path+"corner_iter"+str(iter)+".png", dpi=350)
             plt.show()
             # 3. density and velocity dispersion profiles - same as before
@@ -734,7 +738,6 @@ if True:
 
     def frac_error(r_est, r_true, M_est, M_true):
         frac_error = numpy.zeros(len(r_est))
-        
         for i in range(len(r_est)):
             match_idx = (numpy.abs(r_true - r_est[i])).argmin()
             frac_error[i] = (M_est[i]-M_true[match_idx])/M_true[match_idx]
@@ -747,7 +750,7 @@ if True:
         r_true = r
         M_true = numpy.zeros(len(r))
         for i in range(len(r)):
-            M_true[i] = pot.totalMass(r[i])
+            M_true[i] = -pot.force(r_true[i],0,0)[0]*r_true[i]**2/agama.G
 
     chain_smpl = chain[::20]
 
@@ -780,6 +783,7 @@ if True:
     plt.plot(r, beta_med, label=r"$\beta$")
     plt.fill_between(r, beta_low, beta_upp, alpha=0.3, label=r'$\pm1\sigma$ interval')
     plt.axhline(0, c='k', label=r"$\beta=0$")
+    plt.title(figs_path)
     plt.xlabel('Galactocentric radius (kpc)')
     plt.ylabel(r"Anisotropy ($\beta$)", fontsize=18)
     plt.ylim([-1.0, 1.0])
@@ -808,13 +812,7 @@ if True:
                         frac_error(r, r_true, Menc_upp, M_true), color=color, 
                         alpha=0.3, lw=0)
 
-    descrip = ""
-    if datasetType == 'latte':
-        descrip = f"{datasetType} {lattesim} {lsr} {gaiaRelease}"
-    else:
-        descrip = f"{datasetType} {gaiaRelease}"
-
-    axs[0].set_title(descrip)
+    axs[0].set_title(figs_path)
     axs[1].axhline(0, c='k', linewidth=1)
     axs[1].axhline(0.2, c='k', linewidth=0.5, linestyle='dotted')
     axs[1].axhline(-0.2, c='k', linewidth=0.5, linestyle='dotted')
@@ -832,3 +830,5 @@ if True:
     plt.tight_layout()
     plt.savefig(figs_path+'jeans_result.jpg', dpi=250)
     plt.show()
+
+    print(f"FINISHED AT {figs_path}")
