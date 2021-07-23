@@ -289,7 +289,7 @@ else:
         lsr = sys.argv[3].upper()
         gaiaRelease = sys.argv[4]
         if len(sys.argv) == 6:
-            if sys.argv[3] == 'largevlos':
+            if sys.argv[5] == 'largevlos':
                 LARGEVLOS = True
         print(f"RUNNING LATTE {lattesim} {lsr} {gaiaRelease} {'with large Vlos errors' if LARGEVLOS else ''}")
     else:
