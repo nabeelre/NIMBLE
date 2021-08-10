@@ -15,23 +15,12 @@ decmin=-35.0   # min declination for the selection box (degrees)
 
 d2r   = numpy.pi/180  # conversion from degrees to radians
 
-# TO DO:
-# test on indu.astro
-# code true profiles for agama
 
-# Notes:
-# Check to see what total_proper_motion_uncertainty is ... sum or average or something else?
-    # total_proper_motion_uncertainty is a simple average of the PM RAcosdec and PM Dec uncertainties
-    # So, no need to divide its output by two when using it as PMerr: a single unc for either direction
-# emcee parallelization will probably only work with newer emcee versions
-# combine makeMock & readMock to reduce repeated code
-# DESI lower mag limit is 16? https://arxiv.org/pdf/2010.11284.pdf - says 16 in r mag
-# true sigma and density profiles for Latte datasets -> combine both tangential dispersions
-# LSR information for latte datasets and coordinate rotations where necessary
-# improve plots
-# write jeans into this script
-# doing true profiles wrong? 
-    # I'm using only the metal poor star particles to make them, should i use all star particles
+def write_txt(data, filename, column_titles):
+    numpy.savetxt(
+        fname=figs_path+filename, X=data, delimiter=',', header=column_titles
+    )
+    return
 
 
 def rotate_x(x_old, y_old, theta):
@@ -141,6 +130,7 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
 
         # sample 6d points from the model (over the entire space)
         xv = gm.sample(nbody)[0]
+        # xv = gm.sample(nbody)[0]  for resample test
         radii = numpy.sqrt(xv[:,0]**2 + xv[:,1]**2 + xv[:,2]**2)
 
         sig= gm.moments(xyz, dens=False, vel=False, vel2=True)
@@ -299,7 +289,7 @@ else:
     assert(gaiaRelease in ['dr3', 'dr4', 'dr5'])
     assert(lattesim in ['m12f', 'm12i', 'm12m', None])
     assert(lsr in ['LSR0', 'LSR1', 'LSR2', None])
-        
+
 if datasetType == 'agama':
     agama.setUnits(length=1, mass=1, velocity=1)
     pot = agama.Potential(type='nfw', scaleradius=18, mass=1e12)    # a typical Milky Way-sized NFW halo
@@ -512,7 +502,7 @@ if True:
         fig = plt.figure(figsize=(7,7))
         gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
         axs = gs.subplots(sharex=True)
-        
+
         r  = numpy.logspace(0, 2, 41)
         lr = numpy.log(r)
         if datasetType == 'agama':
@@ -522,45 +512,45 @@ if True:
             trueparams_dens = numpy.log((numpy.exp(S(knots_logr))) / (4.0 * numpy.pi * (numpy.exp(knots_logr)**3)))
         trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]  # set the first element of array to zero and exclude it
         truedens = numpy.exp(modelDensity(trueparams_dens)(lr))
-        
+
         # main plot
         axs[0].plot(r, truedens, 'k--', label='true density')
         # retrieve density profiles of each model in the chain, and compute median and 16/84 percentiles
         results = numpy.zeros((len(chain), len(r)))
         for i in range(len(chain)):
             results[i] = numpy.exp(modelDensity(chain[i, 0:len(knots_logr)-1])(lr))
-        low, med, upp = numpy.percentile(results, [16,50,84], axis=0)
+        dens_low, dens_med, dens_upp = numpy.percentile(results, [16,50,84], axis=0)
         # plot the model profiles with 1sigma confidence intervals
-        axs[0].fill_between(r, low, upp, alpha=0.3, lw=0, color='r')
-        axs[0].plot(r, med, color='r', label='fit density')
+        axs[0].fill_between(r, dens_low, dens_upp, alpha=0.3, lw=0, color='r')
+        axs[0].plot(r, dens_med, color='r', label='fit density')
         count_obs = numpy.histogram(logr_obs, bins=lr)[0]
         rho_obs = count_obs / (4 * numpy.pi * (lr[1:]-lr[:-1]) * (r[1:]*r[:-1])**1.5 * len(Gapp))
         axs[0].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(rho_obs, 2), 'b', label='actual dataset')
-        
+
         axs[0].set_title(figs_path)
         axs[0].set_ylabel('3d density of tracers')
         axs[0].set_yscale('log')
         axs[0].set_xlim(min(r), max(r))
         axs[0].set_ylim(min(truedens)*0.2, max(truedens)*2)
         axs[0].legend(loc='upper right', frameon=False)
-        
+
         # percent error
-        percerr = 100*((med - truedens) / truedens)
-        lowerr = 100*((low - truedens) / truedens)
-        upperr = 100*((upp - truedens) / truedens)
+        percerr = 100*((dens_med - truedens) / truedens)
+        lowerr = 100*((dens_low - truedens) / truedens)
+        upperr = 100*((dens_upp - truedens) / truedens)
         axs[1].plot(r, percerr, 'g')
         axs[1].fill_between(r, lowerr, upperr, alpha=0.3, lw=0, color='g')
         axs[1].axhline(0, c='gray', linestyle='dashed')
         axs[1].set_ylim(-55,55)
-        
+
         axs[1].set_xlabel('Galactocentric radius (kpc)')
         axs[1].set_ylabel('percent error (%)')
         axs[1].set_xscale('log')
-        
+
         plt.tight_layout()
         plt.savefig(figs_path+plotname+'_dens.jpg', dpi=300)
         plt.show()
-        
+
         # Sigma plots
         fig = plt.figure(figsize=(12,7))
         gs = fig.add_gridspec(2,2, hspace=0, wspace=0, height_ratios=[3, 1], width_ratios=[1,1])
@@ -579,7 +569,7 @@ if True:
         low_t, med_t, upp_t = numpy.percentile(results_t, [16,50,84], axis=0)
         axs[0,1].fill_between(r, low_t, upp_t, alpha=0.3, lw=0, color='r')
         axs[0,1].plot(r, med_t, color='r', label='fit $\sigma_\mathrm{tan}$')
-        
+
         if datasetType == 'agama':
             truesigr = numpy.exp(true_sigmar(lr))
             truesigt = numpy.exp(true_sigmat(lr))
@@ -588,7 +578,7 @@ if True:
             truesigt = true_sigmat(lr)**0.5
         axs[0,0].plot(r, truesigr, 'k--', label='true $\sigma_\mathrm{rad}$')
         axs[0,1].plot(r, truesigt, 'k--', label='true $\sigma_\mathrm{tan}$')
-        
+
         percerr_r = 100*((med_r - truesigr) / truesigr)
         lowerr_r = 100*((low_r - truesigr) / truesigr)
         upperr_r = 100*((upp_r - truesigr) / truesigr)
@@ -601,7 +591,7 @@ if True:
         axs[1,1].plot(r, percerr_t, c='g')
         axs[1,1].axhline(0, c='gray', linestyle='dashed')
         axs[1,1].fill_between(r, lowerr_t, upperr_t, alpha=0.3, lw=0, color='g')
-        
+
         # and plot the observed radial/tangential dispersions, which are affected by distance errors
         # and broadened by PM errors (especially the tangential dispersion)
         sigmar_obs = (numpy.histogram(logr_obs, bins=lr, weights=vr_obs**2)[0] / count_obs)**0.5
@@ -616,7 +606,7 @@ if True:
         axs[1,0].set_ylim(-55,55)
         axs[1,1].set_ylim(-55,55)
         axs[1,1].set_yticklabels([])
-        
+
         axs[0,0].set_xlim(min(r), max(r))
         axs[0,0].set_title(figs_path)
         axs[1,0].set_xlabel('Galactocentric radius (kpc)')
@@ -625,10 +615,17 @@ if True:
         axs[1,0].set_ylabel('percent error (%)')
         axs[0,0].legend(loc='upper left', frameon=False)
         axs[0,1].legend(loc='upper left', frameon=False)
-        
+
         plt.tight_layout()
         plt.savefig(figs_path+plotname+'_sigs.jpg', dpi=300)
         plt.show()
+
+        if plotname == 'converged':
+            profiles_data = numpy.stack([r, dens_low, dens_med, dens_upp, truedens, low_r, med_r, upp_r, truesigr, low_t, med_t, upp_t, truesigt], axis=1)
+            write_txt(profiles_data, "plotprofiles.csv", "r, dens_low, dens_med, dens_upp, truedens, low_r, med_r, upp_r, truesigr, low_t, med_t, upp_t, truesigt")
+
+            actual_profs = numpy.stack([numpy.repeat(r,2)[1:-1], numpy.repeat(rho_obs, 2), numpy.repeat(sigmar_obs, 2), numpy.repeat(sigmat_obs, 2)], axis=1)
+            write_txt(actual_profs, "actualprofiles.csv", "rgrid, dens, sigmar, sigmat")
 
     # initial values of parameters
     params_dens    = -numpy.linspace(1, 3, len(knots_logr)-1)**2  # log of (un-normalized) density values at radial knots
@@ -663,7 +660,7 @@ if True:
     # then start a MCMC around the best-fit params
     paramdisp= numpy.ones(len(params))*0.1  # spread of initial walkers around best-fit params
     nwalkers = 2*len(params)   # minimum possible number of walkers in emcee
-    nsteps   = 500
+    nsteps   = 500  # 1000
     walkers  = numpy.empty((nwalkers, len(params)))
     numtries = 0
     for i in range(nwalkers):
@@ -744,7 +741,7 @@ if True:
         return frac_error
 
     if datasetType == 'latte':
-        r_true, M_true = numpy.loadtxt(fname=f"latte/{lattesim}/{lattesim}_smpl.csv", 
+        r_true, M_true = numpy.loadtxt(fname=f"latte/{lattesim}/{lattesim}_smpl.csv",
                                        delimiter=',', skiprows=1, unpack=True)
     elif datasetType == 'agama':
         r_true = r
@@ -804,12 +801,12 @@ if True:
 
     axs[0].plot(r, Menc_med, c=color, linewidth=2.5, label='Jeans estimate')
     axs[0].fill_between(r, Menc_low, Menc_upp, color=color, alpha=0.3, lw=0, label=r'$\pm1\sigma$ interval')
-    
+
     axs[0].plot(r_true, M_true, c='k', linewidth=1.5, linestyle='dashed', label='True')
-    
+
     axs[1].plot(r, frac_error(r, r_true, Menc_med, M_true), c=color, linewidth=2.0)
-    axs[1].fill_between(r, frac_error(r, r_true, Menc_low, M_true), 
-                        frac_error(r, r_true, Menc_upp, M_true), color=color, 
+    axs[1].fill_between(r, frac_error(r, r_true, Menc_low, M_true),
+                        frac_error(r, r_true, Menc_upp, M_true), color=color,
                         alpha=0.3, lw=0)
 
     axs[0].set_title(figs_path)
@@ -830,5 +827,8 @@ if True:
     plt.tight_layout()
     plt.savefig(figs_path+'jeans_result.jpg', dpi=250)
     plt.show()
+
+    finals_data = numpy.stack([r, Menc_low, Menc_med, Menc_upp, beta_low, beta_med, beta_upp], axis=1)
+    write_txt(finals_data, "finals.csv", "r, Menc_low, Menc_med, Menc_upp, beta_low, beta_med, beta_upp")
 
     print(f"FINISHED AT {figs_path}")
