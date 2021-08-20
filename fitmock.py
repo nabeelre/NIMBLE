@@ -15,7 +15,7 @@ decmin=-35.0   # min declination for the selection box (degrees)
 
 minKnot = 15  # kpc
 maxKnot = 80  # kpc
-numKnot = 5  
+numKnot = 5
 
 d2r   = numpy.pi/180  # conversion from degrees to radians
 
