@@ -13,6 +13,10 @@ DMerr = 0.24   # scatter in abs.magnitude
 bmin  = 30.0   # min galactic latitude for the selection box (in degrees)
 decmin=-35.0   # min declination for the selection box (degrees)
 
+minKnot = 15  # kpc
+maxKnot = 80  # kpc
+numKnot = 5  
+
 d2r   = numpy.pi/180  # conversion from degrees to radians
 
 
@@ -301,7 +305,7 @@ if datasetType == 'agama':
 elif datasetType == 'latte':
     l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
         lsr_info = loadMock(datasetType, lattesim=lattesim, gaiaRelease=gaiaRelease, lsr=lsr)
-    figs_path = f"latte_{lattesim}_{lsr}_{gaiaRelease}_figs/"
+    figs_path = f"latte_{lattesim}_{lsr}_{gaiaRelease}_figs_{minKnot}-{maxKnot}-{numKnot}/"
 
 print('%i stars in the survey volume' % len(l))
 blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
@@ -332,7 +336,7 @@ if True:
     plt.xlabel('galactic longitude l (degrees)')
     plt.ylabel('galactic latitude b (degrees)')
     plt.tight_layout()
-    plt.savefig(figs_path+"sel_bounds.png", dpi=250)
+    plt.savefig(figs_path+"sel_bounds.png", dpi=150)
     plt.show()
 
 #fitDensityProfile(l, b, Gapp, pml, pmb, vlos, PMerr, vloserr)
@@ -394,7 +398,7 @@ if True:
     vloserr2_samp = numpy.repeat(vloserr, nsamples)**2
 
     # knots in Galactocentric radius (minimum is imposed by our cut |b|>30, maximum - by the extent of data)
-    knots_logr = numpy.linspace(numpy.log(7.0), numpy.log(80.0), 6)
+    knots_logr = numpy.linspace(numpy.log(minKnot), numpy.log(maxKnot), numKnot)
 
     def modelDensity(params):
         # params is the array of logarithms of density at radial knots, which must monotonically decrease
@@ -503,8 +507,10 @@ if True:
         gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
         axs = gs.subplots(sharex=True)
 
-        r  = numpy.logspace(0, 2, 41)
+        r  = numpy.logspace(0, 2, 200)
         lr = numpy.log(r)
+        rhist = numpy.logspace(0, 2, 41)
+        lrhist = numpy.log(rhist)
         if datasetType == 'agama':
             trueparams_dens = numpy.log(den.density(numpy.column_stack((numpy.exp(knots_logr), knots_logr*0, knots_logr*0))))
         if datasetType == 'latte':
@@ -523,9 +529,9 @@ if True:
         # plot the model profiles with 1sigma confidence intervals
         axs[0].fill_between(r, dens_low, dens_upp, alpha=0.3, lw=0, color='r')
         axs[0].plot(r, dens_med, color='r', label='fit density')
-        count_obs = numpy.histogram(logr_obs, bins=lr)[0]
-        rho_obs = count_obs / (4 * numpy.pi * (lr[1:]-lr[:-1]) * (r[1:]*r[:-1])**1.5 * len(Gapp))
-        axs[0].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(rho_obs, 2), 'b', label='actual dataset')
+        count_obs = numpy.histogram(logr_obs, bins=lrhist)[0]
+        rho_obs = count_obs / (4 * numpy.pi * (lrhist[1:]-lrhist[:-1]) * (rhist[1:]*rhist[:-1])**1.5 * len(Gapp))
+        axs[0].plot(numpy.repeat(rhist,2)[1:-1], numpy.repeat(rho_obs, 2), 'b', label='actual dataset')
 
         axs[0].set_title(figs_path)
         axs[0].set_ylabel('3d density of tracers')
@@ -548,7 +554,7 @@ if True:
         axs[1].set_xscale('log')
 
         plt.tight_layout()
-        plt.savefig(figs_path+plotname+'_dens.jpg', dpi=300)
+        plt.savefig(figs_path+plotname+'_dens.jpg', dpi=150)
         plt.show()
 
         # Sigma plots
@@ -594,10 +600,10 @@ if True:
 
         # and plot the observed radial/tangential dispersions, which are affected by distance errors
         # and broadened by PM errors (especially the tangential dispersion)
-        sigmar_obs = (numpy.histogram(logr_obs, bins=lr, weights=vr_obs**2)[0] / count_obs)**0.5
-        sigmat_obs = (numpy.histogram(logr_obs, bins=lr, weights=vt_obs**2)[0] / count_obs)**0.5
-        axs[0,0].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(sigmar_obs, 2), 'b', label='actual dataset $\sigma_\mathrm{rad}$', alpha=0.3)
-        axs[0,1].plot(numpy.repeat(r,2)[1:-1], numpy.repeat(sigmat_obs, 2), 'b', label='actual dataset $\sigma_\mathrm{tan}$', alpha=0.3)
+        sigmar_obs = (numpy.histogram(logr_obs, bins=lrhist, weights=vr_obs**2)[0] / count_obs)**0.5
+        sigmat_obs = (numpy.histogram(logr_obs, bins=lrhist, weights=vt_obs**2)[0] / count_obs)**0.5
+        axs[0,0].plot(numpy.repeat(rhist,2)[1:-1], numpy.repeat(sigmar_obs, 2), 'b', label='actual dataset $\sigma_\mathrm{rad}$', alpha=0.3)
+        axs[0,1].plot(numpy.repeat(rhist,2)[1:-1], numpy.repeat(sigmat_obs, 2), 'b', label='actual dataset $\sigma_\mathrm{tan}$', alpha=0.3)
 
         #upper_bound = max(numpy.hstack((upp_r, upp_t, sigmar_obs, sigmat_obs, truesigr, truesigt)))*1.1
         axs[0,0].set_ylim(-20,500)
@@ -617,14 +623,14 @@ if True:
         axs[0,1].legend(loc='upper left', frameon=False)
 
         plt.tight_layout()
-        plt.savefig(figs_path+plotname+'_sigs.jpg', dpi=300)
+        plt.savefig(figs_path+plotname+'_sigs.jpg', dpi=150)
         plt.show()
 
         if plotname == 'converged':
             profiles_data = numpy.stack([r, dens_low, dens_med, dens_upp, truedens, low_r, med_r, upp_r, truesigr, low_t, med_t, upp_t, truesigt], axis=1)
             write_txt(profiles_data, "plotprofiles.csv", "r, dens_low, dens_med, dens_upp, truedens, low_r, med_r, upp_r, truesigr, low_t, med_t, upp_t, truesigt")
 
-            actual_profs = numpy.stack([numpy.repeat(r,2)[1:-1], numpy.repeat(rho_obs, 2), numpy.repeat(sigmar_obs, 2), numpy.repeat(sigmat_obs, 2)], axis=1)
+            actual_profs = numpy.stack([numpy.repeat(rhist,2)[1:-1], numpy.repeat(rho_obs, 2), numpy.repeat(sigmar_obs, 2), numpy.repeat(sigmat_obs, 2)], axis=1)
             write_txt(actual_profs, "actualprofiles.csv", "rgrid, dens, sigmar, sigmat")
 
     # initial values of parameters
@@ -707,12 +713,12 @@ if True:
             axes[-1].set_ylim(maxloglike-3*len(params), maxloglike)
             plt.tight_layout(h_pad=0)
             plt.subplots_adjust(hspace=0,wspace=0)
-            plt.savefig(figs_path+"param_evol_iter"+str(iter)+".png", dpi=350)
+            plt.savefig(figs_path+"param_evol_iter"+str(iter)+".png", dpi=150)
             plt.show()
             # 2. corner plot - covariances of all parameters
             corner.corner(chain, quantiles=[0.16, 0.5, 0.84], labels=paramnames, show_titles=True)
             plt.title(figs_path)
-            plt.savefig(figs_path+"corner_iter"+str(iter)+".png", dpi=350)
+            plt.savefig(figs_path+"corner_iter"+str(iter)+".png", dpi=150)
             plt.show()
             # 3. density and velocity dispersion profiles - same as before
             if not converged: plotprofiles(chain[::20], "MCMC_iter"+str(iter))
@@ -786,14 +792,14 @@ if True:
     plt.ylim([-1.0, 1.0])
     plt.legend()
     plt.tight_layout()
-    plt.savefig(figs_path+'anisotropy.jpg', dpi=250)
+    plt.savefig(figs_path+'anisotropy.jpg', dpi=150)
     plt.show()
     plt.cla()
 
     # Mass enclosed plot
     plt.rcParams.update({'font.size': 18})
     plt.rcParams['agg.path.chunksize'] = 10000  # overflow error on line 835 without this
-    fig = plt.figure(figsize=(15,10), dpi=250)
+    fig = plt.figure(figsize=(15,10))
     gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
     axs = gs.subplots(sharex=True)
     colors = {'m12f': '#4a0078', 'm12i': '#157F1F', 'm12m': '#931621', None: 'red'}
@@ -825,7 +831,7 @@ if True:
         ax.label_outer()
 
     plt.tight_layout()
-    plt.savefig(figs_path+'jeans_result.jpg', dpi=250)
+    plt.savefig(figs_path+'jeans_result.jpg', dpi=150)
     plt.show()
 
     finals_data = numpy.stack([r, Menc_low, Menc_med, Menc_upp, beta_low, beta_med, beta_upp], axis=1)

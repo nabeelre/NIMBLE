@@ -1,5 +1,5 @@
 .DS_Store
 latte/
-*figs/
+*figs*/
 .ipynb_checkpoints/
 *.sh
