@@ -13,7 +13,7 @@ DMerr = 0.24   # scatter in abs.magnitude
 bmin  = 30.0   # min galactic latitude for the selection box (in degrees)
 decmin=-35.0   # min declination for the selection box (degrees)
 
-minKnot = 15  # kpc
+minKnot = 5  # kpc
 maxKnot = 80  # kpc
 numKnot = 5
 
@@ -124,8 +124,7 @@ def rotate_coords(sim, lsr, positions, velocities):
 
 
 def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None, r_a=None, nbody=None, lattesim=None, lsr=None):
-    rr = numpy.logspace(0, 2, 15)
-    xyz= numpy.column_stack((rr, rr*0, rr*0))
+    truesig_knots = numpy.logspace(0, numpy.log10(200), 15)
     if datasetType == 'agama':
          # create a spherical anisotropic DF and compute its true velocity dispersions
         df = agama.DistributionFunction(type='quasispherical',
@@ -137,10 +136,11 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
         # xv = gm.sample(nbody)[0]  for resample test
         radii = numpy.sqrt(xv[:,0]**2 + xv[:,1]**2 + xv[:,2]**2)
 
-        sig= gm.moments(xyz, dens=False, vel=False, vel2=True)
+        xyz = numpy.column_stack((truesig_knots, truesig_knots*0, truesig_knots*0))
+        sig = gm.moments(xyz, dens=False, vel=False, vel2=True)
         # represent sigma profiles as cubic splines for log(sigma) as a function of log(r)
-        true_sigmar = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,0]**0.5))
-        true_sigmat = agama.CubicSpline(numpy.log(rr), numpy.log(sig[:,1]**0.5))
+        true_sigmar = agama.CubicSpline(numpy.log(truesig_knots), numpy.log(sig[:,0]**0.5))
+        true_sigmat = agama.CubicSpline(numpy.log(truesig_knots), numpy.log(sig[:,1]**0.5))
 
         # agama default values
         lsr_info = (8.122, (12.9, 245.6, 7.78), 0.0208)
@@ -159,8 +159,8 @@ def loadMock(datasetType, gaiaRelease, density=None, potential=None, beta0=None,
         xv = numpy.column_stack((x_new, y_new, z, vx_new, vy_new, vz))
         nbody = len(x_new)
 
-        true_sigmar = agama.splineApprox(numpy.log(rr), numpy.log(radii), rvelsq)
-        true_sigmat = agama.splineApprox(numpy.log(rr), numpy.log(radii), (tvelsq + pvelsq)/2)
+        true_sigmar = agama.splineApprox(numpy.log(truesig_knots), numpy.log(radii), rvelsq)
+        true_sigmat = agama.splineApprox(numpy.log(truesig_knots), numpy.log(radii), (tvelsq + pvelsq)/2)
 
     l, b, dist, pml, pmb, vlos = agama.getGalacticFromGalactocentric(*xv.T, *lsr_info)
     ra, dec, pmra, pmdec  = agama.transformCelestialCoords(agama.fromGalactictoICRS, l, b, pml, pmb)
@@ -400,7 +400,7 @@ if True:
     # knots in Galactocentric radius (minimum is imposed by our cut |b|>30, maximum - by the extent of data)
     knots_logr = numpy.linspace(numpy.log(minKnot), numpy.log(maxKnot), numKnot)
 
-    def modelDensity(params):
+    def modelDensity(params, truedens=False):
         # params is the array of logarithms of density at radial knots, which must monotonically decrease
         # note that since the result is invariant w.r.t. the overall amplitude of the density
         # (it is always renormalized to unity), the first element of this array may be fixed to 0
@@ -408,12 +408,16 @@ if True:
         if any(knots_logdens[1:] >= knots_logdens[:-1]):
             raise RuntimeError('Density is non-monotonic')
         # represent the spherically symmetric 1d profile log(rho) as a cubic spline in log(r)
-        logrho = agama.CubicSpline(knots_logr, knots_logdens, reg=True)  # ensure monotonic spline (reg)
+        if truedens:
+            dens_knots = numpy.linspace(numpy.log(1), numpy.log(200), 12)
+        else:
+            dens_knots = knots_logr
+        logrho = agama.CubicSpline(dens_knots, knots_logdens, reg=True)  # ensure monotonic spline (reg)
         # check that the density profile has a finite total mass
         # (this is not needed for the fit, because the normalization is computed over the accessible volume,
         # but it generally makes sense to have a physically valid model for the entire space).
-        slope_in  = logrho(knots_logr[ 0], der=1)  # d[log(rho)]/d[log(r)], log-slope at the lower radius
-        slope_out = logrho(knots_logr[-1], der=1)
+        slope_in  = logrho(dens_knots[ 0], der=1)  # d[log(rho)]/d[log(r)], log-slope at the lower radius
+        slope_out = logrho(dens_knots[-1], der=1)
         if slope_in <= -3.0 or slope_out >= -3.0:
             raise RuntimeError('Density has invalid asymptotic slope: inner=%.2f, outer=%.2f' % (slope_in, slope_out))
 
@@ -453,7 +457,7 @@ if True:
             upper=[1, numpy.sin(-bmin*d2r), Gmax+4*DMerr], toler=1e-5)[0]
 
         # now renormalize the density profile to have unit integral over the selection volume
-        logrho = agama.CubicSpline(knots_logr, knots_logdens - numpy.log(norm), reg=True)
+        logrho = agama.CubicSpline(dens_knots, knots_logdens - numpy.log(norm), reg=True)
         return logrho
 
     def modelSigma(params):
@@ -509,15 +513,31 @@ if True:
 
         r  = numpy.logspace(0, 2, 200)
         lr = numpy.log(r)
-        rhist = numpy.logspace(0, 2, 41)
+        rhist = numpy.logspace(0, 2, 81)
         lrhist = numpy.log(rhist)
+        knots_logr_true = numpy.linspace(numpy.log(1), numpy.log(200), 12)
         if datasetType == 'agama':
             trueparams_dens = numpy.log(den.density(numpy.column_stack((numpy.exp(knots_logr), knots_logr*0, knots_logr*0))))
         if datasetType == 'latte':
-            S = agama.splineLogDensity(knots_logr, x=numpy.log(radii), w=numpy.ones(len(radii)), infLeft=True, infRight=True)
-            trueparams_dens = numpy.log((numpy.exp(S(knots_logr))) / (4.0 * numpy.pi * (numpy.exp(knots_logr)**3)))
+            S = agama.splineLogDensity(knots_logr_true, x=numpy.log(radii), w=numpy.ones(len(radii)), infLeft=True, infRight=True)
+            trueparams_dens = numpy.log((numpy.exp(S(knots_logr_true))) / (4.0 * numpy.pi * (numpy.exp(knots_logr_true)**3)))
         trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]  # set the first element of array to zero and exclude it
-        truedens = numpy.exp(modelDensity(trueparams_dens)(lr))
+        truedens = numpy.exp(modelDensity(trueparams_dens, truedens=True)(lr))
+
+        if False:
+            t=numpy.loadtxt(f"latte/{lattesim}/{lattesim}_chem-1.5_full.csv", delimiter=',', skiprows=1)
+            rr=(rhist[1:]*rhist[:-1])**0.5      # bin centers
+            # plot histogram as steps
+            rho_test=numpy.histogram(t[:,7], bins=rhist, weights=t[:,6])[0] / (4./3 * numpy.pi * (rhist[1:]**3-rhist[:-1]**3))
+            plt.loglog(numpy.hstack(zip(rhist[:-1],rhist[1:])), numpy.repeat(rho_test,2), 'k', label='histogram')
+            ld=agama.splineLogDensity(knots_logr_true, numpy.log(t[:,7]), t[:,6], infLeft=True, infRight=True)
+            plt.plot(rr, numpy.exp(ld(numpy.log(rr)))/(4.*numpy.pi*rr**3), 'r', label='spline, 5 knots')
+            plt.plot(numpy.exp(knots_logr_true), numpy.exp(ld(knots_logr_true)-3*knots_logr_true)/4/numpy.pi, 'ro')
+            plt.xlim(0.1, 210)
+            # plt.ylim(1e-2, 1e7)
+            plt.legend(loc='lower left', frameon=False)
+            plt.savefig('m12m_rho.jpg', dpi=150)
+            plt.show()
 
         # main plot
         axs[0].plot(r, truedens, 'k--', label='true density')
@@ -547,7 +567,7 @@ if True:
         axs[1].plot(r, percerr, 'g')
         axs[1].fill_between(r, lowerr, upperr, alpha=0.3, lw=0, color='g')
         axs[1].axhline(0, c='gray', linestyle='dashed')
-        axs[1].set_ylim(-55,55)
+        axs[1].set_ylim(-40,40)
 
         axs[1].set_xlabel('Galactocentric radius (kpc)')
         axs[1].set_ylabel('percent error (%)')
@@ -609,11 +629,11 @@ if True:
         axs[0,0].set_ylim(-20,500)
         axs[0,1].set_ylim(-20,500)
         axs[0,1].set_yticklabels([])
-        axs[1,0].set_ylim(-55,55)
-        axs[1,1].set_ylim(-55,55)
+        axs[1,0].set_ylim(-40,40)
+        axs[1,1].set_ylim(-40,40)
         axs[1,1].set_yticklabels([])
 
-        axs[0,0].set_xlim(min(r), max(r))
+        axs[0,0].set_xlim(min(r), max(r)*1.1)
         axs[0,0].set_title(figs_path)
         axs[1,0].set_xlabel('Galactocentric radius (kpc)')
         axs[1,1].set_xlabel('Galactocentric radius (kpc)')
@@ -819,7 +839,7 @@ if True:
     axs[1].axhline(0, c='k', linewidth=1)
     axs[1].axhline(0.2, c='k', linewidth=0.5, linestyle='dotted')
     axs[1].axhline(-0.2, c='k', linewidth=0.5, linestyle='dotted')
-    axs[1].set_xlim([0,110])
+    axs[1].set_xlim([min(r), max(r)])
     axs[0].set_ylabel(r"M(<r) ($M_{\odot}$)", size=24)
     axs[1].set_xlabel('Galactocentric Radius (kpc)', size=24)
     axs[1].set_ylabel('Fractional Error', size=20)
