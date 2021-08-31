@@ -524,21 +524,6 @@ if True:
         trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]  # set the first element of array to zero and exclude it
         truedens = numpy.exp(modelDensity(trueparams_dens, truedens=True)(lr))
 
-        if False:
-            t=numpy.loadtxt(f"latte/{lattesim}/{lattesim}_chem-1.5_full.csv", delimiter=',', skiprows=1)
-            rr=(rhist[1:]*rhist[:-1])**0.5      # bin centers
-            # plot histogram as steps
-            rho_test=numpy.histogram(t[:,7], bins=rhist, weights=t[:,6])[0] / (4./3 * numpy.pi * (rhist[1:]**3-rhist[:-1]**3))
-            plt.loglog(numpy.hstack(zip(rhist[:-1],rhist[1:])), numpy.repeat(rho_test,2), 'k', label='histogram')
-            ld=agama.splineLogDensity(knots_logr_true, numpy.log(t[:,7]), t[:,6], infLeft=True, infRight=True)
-            plt.plot(rr, numpy.exp(ld(numpy.log(rr)))/(4.*numpy.pi*rr**3), 'r', label='spline, 5 knots')
-            plt.plot(numpy.exp(knots_logr_true), numpy.exp(ld(knots_logr_true)-3*knots_logr_true)/4/numpy.pi, 'ro')
-            plt.xlim(0.1, 210)
-            # plt.ylim(1e-2, 1e7)
-            plt.legend(loc='lower left', frameon=False)
-            plt.savefig('m12m_rho.jpg', dpi=150)
-            plt.show()
-
         # main plot
         axs[0].plot(r, truedens, 'k--', label='true density')
         # retrieve density profiles of each model in the chain, and compute median and 16/84 percentiles

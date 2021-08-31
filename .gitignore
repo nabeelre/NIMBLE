@@ -1,5 +1,6 @@
 .DS_Store
 latte/
+agama/
 *figs*/
 .ipynb_checkpoints/
 *.sh
