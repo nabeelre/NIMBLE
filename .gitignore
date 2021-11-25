@@ -1,6 +1,7 @@
 .DS_Store
-latte/
-agama/
-*figs*/
 .ipynb_checkpoints/
-*.sh
+data/
+results/
+gizmo_read/
+private/
+agama datasets/
