@@ -5,7 +5,7 @@ from multiprocessing import Pool
 numpy.set_printoptions(linewidth=200, precision=6, suppress=True)
 numpy.random.seed(42)
 
-SUBSAMPLE = False
+SUBSAMPLE = True
 VERBOSE = True
 
 Gmax  = 20.7   # max apparent G magnitude for a RRL star to enter the selection
@@ -129,13 +129,13 @@ def rotate_coords(sim, lsr, positions, velocities):
         x_new, y_new, vx_new, vy_new
 
 
-def loadMock(gaiaRelease, lattesim, lsr):
+def loadMock(gaiaRele_rse, lattesim, lsr):
     # Load {sim}_prejeans.csv file written by read_latte.ipynb notebook
     # files with '_prejeans.csv' have the following properties:
     # positions in kpc, velocities in km/s, mass in Msun
     # arranged as [x, y, z, vx, vy, vz, m, gc_radius, vr_sq, vtheta_sq, vphi_sq] 
     x, y, z, vx, vy, vz, \
-        mass, radii, vr_sq, vtheta_sq, vphi_sq = numpy.loadtxt(f"data/{lattesim}_prejeans.csv", 
+        mass, radii, vr_sq, vtheta_sq, vphi_sq = numpy.loadtxt(f"data/{lattesim}/{lattesim}_prejeans.csv", 
                                                                 unpack=True, skiprows=1, delimiter=',')
 
     if SUBSAMPLE:
@@ -185,11 +185,11 @@ def loadMock(gaiaRelease, lattesim, lsr):
     filt *= (Gapp > Gmin) * (Gapp < Gmax)
 
     # Doesnt work with current cov matrix set up
-    # pmracosdec_err, pmdec_err = proper_motion_uncertainty(Gapp, release=gaiaRelease)  # uas/yr
+    # pmracosdec_err, pmdec_err = proper_motion_uncertainty(Gapp, release=gaia_release)  # uas/yr
     # pmra_err *= 0.001; pmdec_err *= 0.001  # uas/yr -> mas/yr
 
     # pull magnitude of proper motion errors from pygaia
-    PMerr = total_proper_motion_uncertainty(Gapp, release=gaiaRelease)  # uas/yr
+    PMerr = total_proper_motion_uncertainty(Gapp, release=gaia_release)  # uas/yr
     PMerr *= 0.001  # uas/yr -> mas/yr
 
     # add proper motion errors
@@ -208,6 +208,18 @@ def loadMock(gaiaRelease, lattesim, lsr):
     # add Vlos errors
     vloserr = numpy.ones(nbody) * 10.0  # km/s
     vlos += numpy.random.normal(size=nbody) * vloserr
+
+    if False:
+        # write error imposed data to disk here
+        dist_obs = 10**(0.2*(Gapp[filt]-Grrl)-2)
+        x,y,z,vx,vy,vz = agama.getGalactocentricFromGalactic(l[filt]*d2r, b[filt]*d2r, dist_obs, 
+                                                            pml[filt]*4.74, pmb[filt]*4.74, vlos[filt], *lsr_info)
+
+        error_imposed = numpy.stack([x,y,z,vx,vy,vz], axis=1)
+        numpy.savetxt(
+            fname=f"private/error_imposed_{gaia_release}.csv", X=error_imposed, delimiter=',', header="x,y,z,vx,vy,vz"
+        )
+        exit(1)
 
     return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
             vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat,
@@ -273,22 +285,22 @@ def getSurveyFootprintBoundary(decmin):
 if len(sys.argv) == 4:
     lattesim = sys.argv[1].lower()
     lsr = sys.argv[2].upper()
-    gaiaRelease = sys.argv[3].lower()
+    gaia_release = sys.argv[3].lower()
 
-    assert(gaiaRelease in ['dr3', 'dr4', 'dr5'])
+    assert(gaia_release in ['dr3', 'dr4', 'dr5'])
     assert(lattesim in ['m12f', 'm12i', 'm12m'])
     assert(lsr in ['LSR0', 'LSR1', 'LSR2'])
 
-    print(f"RUNNING LATTE {lattesim} {lsr} {gaiaRelease}{' with 1/10 subsample' if SUBSAMPLE else ''}")
+    print(f"RUNNING LATTE {lattesim} {lsr} {gaia_release}{' with 1/10 subsample' if SUBSAMPLE else ''}")
 else:
     print("Too few or too many command line arguments")
     exit()
     
 l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
-    lsr_info = loadMock(gaiaRelease, lattesim, lsr)
+    lsr_info = loadMock(gaia_release, lattesim, lsr)
 if VERBOSE: print('Number of particles in survey volume:', len(l))
 
-figs_path = f"results/deconv_{lattesim}_{lsr}_{gaiaRelease}/"
+figs_path = f"results/deconv_{lattesim}_{lsr}_{gaia_release}/"
 
 if SUBSAMPLE:
     figs_path += "sub/"
@@ -733,7 +745,7 @@ if True:
     # radius in kpc, mass in Msun
     # columns arranged as [r, Menc] where Menc is the true enclosed mass
     # rows are sorted by increasing radius
-    r_true, M_true = numpy.loadtxt(fname=f"data/{lattesim}_true.csv",
+    r_true, M_true = numpy.loadtxt(fname=f"data/{lattesim}/{lattesim}_true.csv",
                                 delimiter=',', skiprows=1, unpack=True)
 
     # Thin the chain
