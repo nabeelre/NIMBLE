@@ -10,10 +10,9 @@ min_rad = 1
 max_rad = 100
 
 # B-SPLINE PARAMETERS - USED FOR ALL B-SPLINES
-min_knot  = 5  # kpc
+min_knot  = 5   # kpc
 max_knot  = 80  # kpc
 num_knots = 5
-smoothing = 1
 
 # Parameters used in Rehemtulla et al. 2021 [min_knot, max_knot, num_knots]
 # Sec 4.1
@@ -86,7 +85,7 @@ else:
 
 if VERBOSE:
     print(f"Found {len(radii)} particles in {filepath}")
-    results_filepath = f"results/plain_{dataset_name}/"
+    results_filepath = f"results/{dataset_name}/"
     if not os.path.exists(results_filepath):
         os.makedirs(results_filepath)
         print(f"created output directory for results at {results_filepath}")
@@ -116,14 +115,14 @@ r = np.linspace(min_rad, max_rad, 200)
 q = np.log(r)
 
 if 'halo_alone' in filepath:
-    rad_mask = [(radii >= min_knot) & (radii <= max_knot)]
-else:
-    rad_mask = np.ones(len(radii), dtype=bool)
+    rad_mask = [(radii >= min_knot) * (radii <= max_knot)]
+    radii = radii[tuple(rad_mask)]; vr_sq = vr_sq[tuple(rad_mask)]; 
+    vtheta_sq = vtheta_sq[tuple(rad_mask)]; vphi_sq = vphi_sq[tuple(rad_mask)]
 
 # Fit cubic spline in log to square of each spherical velocity component
-vr_bspline     = agama.splineApprox(knots, np.log(radii[rad_mask]), vr_sq[rad_mask],     smooth=smoothing)
-vtheta_bspline = agama.splineApprox(knots, np.log(radii[rad_mask]), vtheta_sq[rad_mask], smooth=smoothing)
-vphi_bspline   = agama.splineApprox(knots, np.log(radii[rad_mask]), vphi_sq[rad_mask],   smooth=smoothing)
+vr_bspline     = agama.splineApprox(knots, np.log(radii), vr_sq)
+vtheta_bspline = agama.splineApprox(knots, np.log(radii), vtheta_sq)
+vphi_bspline   = agama.splineApprox(knots, np.log(radii), vphi_sq)
 
 vr_fit     = vr_bspline(q)
 vtheta_fit = vtheta_bspline(q)
@@ -175,7 +174,7 @@ if VERBOSE:
     plt.legend(prop={'size':20})
     plt.savefig(f"{results_filepath}beta.pdf", dpi=200, bbox_inches='tight')
 
-S = agama.splineLogDensity(knots, x=np.log(radii[rad_mask]), w=np.ones(len(radii[rad_mask])), smooth=smoothing)
+S = agama.splineLogDensity(knots, x=np.log(radii), w=np.ones(len(radii)))
 rho = rho_eval(S, r)
 dlnrho_dlnr = dlnrho_dlnr_eval(S, r)
 

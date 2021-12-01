@@ -10,6 +10,7 @@ import os, sys, numpy as np, matplotlib.pyplot as plt, astropy.units as u
 from configparser import RawConfigParser
 import agama
 import jeans_util as util
+np.random.seed(42)
 
 # print some diagnostic information after each iteration
 def printoutInfo(model, iteration):
@@ -28,10 +29,13 @@ def printoutInfo(model, iteration):
     # report only the potential of stars+halo, excluding the potential of the central BH (0th component)
     # pot0 = model.potential.potential(0,0,0) - model.potential[0].potential(0,0,0)
 
+
 # True: give the halo a Cuddeford-Osipkov-Merrit velocity anisotropy parameter
-osipkov_merrit = False
-# True: also
-disk_contam = False
+osipkov_merrit = True  # abbreviated to OM in filenames
+# True: also run variant with disk stars contaminating halo sample
+disk_contam = True # abbreviated to DC in filenames
+
+
 print(f"Running halo-disk-bulge simulation{' with radially varying velocity anisotropy' if osipkov_merrit else ''}")
 if not os.path.exists("../data/halo_disk_bulge/"):
     os.makedirs("../data/halo_disk_bulge/")
@@ -88,7 +92,7 @@ model.components[1] = agama.Component(df=dfBulge, disklike=False, **iniSCMBulge)
 model.components[2] = agama.Component(df=dfHalo,  disklike=False, **iniSCMHalo)
 
 # do a few more iterations to obtain the self-consistent density profile for both disks
-for i in range(5):
+for i in range(10):
     print("\033[1;37mStarting iteration #%d\033[0m" % i)
     model.iterate()
     printoutInfo(model, 'iter%d'%i)
@@ -103,8 +107,12 @@ print("\033[1;33mCreating an N-body representation of the model\033[0m")
 # by drawing positions and velocities from the DF in the given (self-consistent) potential
 print("Sampling halo DF")
 pos, mass = agama.GalaxyModel(potential=model.potential, df=dfHalo,  af=model.af).sample(300000)
+print("Sampling disk DF")
+pos_d, mass_d = agama.GalaxyModel(potential=model.potential, df=dfDisk,  af=model.af).sample(160000)
+print("Sampling bulge DF")
+pos_b, mass_b = agama.GalaxyModel(potential=model.potential, df=dfBulge,  af=model.af).sample(40000)
 
-print("Preparing files for Jeans routine input")
+print("\033[1;33mPreparing files for input into jeans routines\033[0m")
 x  = pos[:,0]
 y  = pos[:,1]
 z  = pos[:,2]
@@ -151,16 +159,31 @@ np.savetxt(
     delimiter=',', header=" x, y, z [kpc], vx, vy, vz [km/s], mass [Msun], gc_radius, vr_sq, vtheta_sq, vphi_sq [km2/s2]"
 )
 
+r_d = (pos_d[:,0]**2 + pos_d[:,1]**2 + pos_d[:,2]**2)**0.5
+r_b = (pos_b[:,0]**2 + pos_b[:,1]**2 + pos_b[:,2]**2)**0.5
+
+r_d    = convert(r_d,  HDB_length, u.kpc)
+r_b    = convert(r_b,  HDB_length, u.kpc)
+mass_d = convert(mass_d,  HDB_mass, u.Msun)
+mass_b = convert(mass_b,  HDB_mass, u.Msun)
+
+r_mix = np.concatenate((r, r_d, r_b))
+m_mix = np.concatenate((mass, mass_d, mass_b))
+
+sorter = np.argsort(r_mix)
+r_mix = r_mix[sorter]; m_mix = m_mix[sorter]
+
+# Need this to include all components
 np.savetxt(
     fname=f"../data/halo_disk_bulge/HDB{'_OM' if osipkov_merrit else ''}_true.csv",
-    X=np.stack([r[::300], np.cumsum(mass)[::300]], axis=1),
+    X=np.stack([r_mix[::10], np.cumsum(m_mix)[::10]], axis=1),
     delimiter=',', header=" r [kpc], M(<r)_true [Msun]"
 )
 
 if disk_contam:
     # also write HDB variant with halo sample contaminated by disk particles
+    print("Creating mock with contamination of halo by disk particles")
     print("Sampling disk DF")
-    pos_d, mass_d = agama.GalaxyModel(potential=model.potential, df=dfDisk,  af=model.af).sample(160000)
     idxs = np.random.choice(np.arange(len(mass_d)), int(len(mass_d)/4), replace=False)
 
     x_d    = convert(pos_d[:,0][idxs], HDB_length, u.kpc)
@@ -169,8 +192,7 @@ if disk_contam:
     vx_d   = convert(pos_d[:,3][idxs], HDB_length/HDB_time, u.km/u.s)
     vy_d   = convert(pos_d[:,4][idxs], HDB_length/HDB_time, u.km/u.s)
     vz_d   = convert(pos_d[:,5][idxs], HDB_length/HDB_time, u.km/u.s)
-    mass_d = convert(mass_d, HDB_mass, u.Msun)
-    print(len(x_d))
+    mass_d = convert(mass_d[idxs], HDB_mass, u.Msun)
 
     r_d, vr_sq_d, vtheta_sq_d, vphi_sq_d = util.format_dataset(np.transpose([x_d, y_d, z_d, vx_d, vy_d, vz_d]))
 
@@ -193,8 +215,7 @@ if disk_contam:
     x_mix = x_mix[sorter]; y_mix = y_mix[sorter]; z_mix = z_mix[sorter]
     vx_mix = vx_mix[sorter]; vy_mix = vy_mix[sorter]; vz_mix = vz_mix[sorter]
     vr_sq_mix = vr_sq_mix[sorter]; vtheta_sq_mix = vtheta_sq_mix[sorter]; vphi_sq_mix = vphi_sq_mix[sorter]
-    r_mix = r_mix[sorter]; mass_mix = mass_mix[sorter]
-    print(len(x_mix))
+    r_mix = r_mix[sorter]; m_mix = m_mix[sorter]
 
     np.savetxt(
         fname=f"../data/halo_disk_bulge/HDB{'_OM' if osipkov_merrit else ''}_DC_prejeans.csv",
@@ -202,11 +223,6 @@ if disk_contam:
                     m_mix, r_mix, vr_sq_mix, vtheta_sq_mix, vphi_sq_mix], axis=1),
         delimiter=',', header=" x, y, z [kpc], vx, vy, vz [km/s], mass [Msun], gc_radius, vr_sq, vtheta_sq, vphi_sq [km2/s2]"
     )
-
-    np.savetxt(
-        fname=f"../data/halo_disk_bulge/HDB{'_OM' if osipkov_merrit else ''}_DC_true.csv",
-        X=np.stack([r_mix[::300], np.cumsum(m_mix)[::300]], axis=1),
-        delimiter=',', header=" r [kpc], M(<r)_true [Msun]"
-    )
+    # No need to write another _true.csv file, it will be shared with the non-DC one
 
 print(f"\033[1;33mFINISHED WITH halo_disk_bulge\033[0m\n")
