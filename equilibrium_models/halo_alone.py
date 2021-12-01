@@ -109,10 +109,13 @@ r=np.logspace(-20.,20.,200)
 xyz=np.vstack((r,r*0,r*0)).T
 plt.plot(r, halo_dens.density(xyz), label='Init density', color='k')
 
-for i in range(1):
+print("\033[1;33m**** STARTING ITERATIVE MODELLING ****\033[0m\nMass (computed from DF): " \
+    "Mhalo=%g" % (halo_DF.totalMass()))
+for i in range(10):
+    print("\033[1;37mStarting iteration #%d\033[0m" % i)
     SCM.iterate()
-    print('Iteration %i, Phi(0)=%g, Mass=%g' % \
-        (i, SCM.potential.potential(0,0,0), SCM.potential.totalMass()))
+    print('Phi(0)=%g, Mass=%g' % \
+         (SCM.potential.potential(0,0,0), SCM.potential.totalMass()))
     plt.plot(r, SCM.potential.density(xyz), label='Iteration #'+str(i))
 plt.legend(loc='lower left')
 plt.xlabel("r")
@@ -124,10 +127,12 @@ plt.xlim(0.01, 30)
 plt.savefig(f"../data/halo_alone/density_evol_{q}.pdf", bbox_inches='tight')
 plt.cla()
 
-# Calculate axis ratios
-# E1 method described in Zemp et al. 2011
+print("\033[1;33mCreating an N-body representation of the model\033[0m")
 pos, mass = agama.GalaxyModel(SCM.potential, halo_DF).sample(300000)
 
+# Calculate axis ratios
+# E1 method described in Zemp et al. 2011
+print("\033[1;33mCalculating axis ratio\033[0m")
 sphrad = np.sum(pos**2, axis=1)**0.5
 order  = np.argsort(sphrad)
 cummass= np.cumsum(mass[order])
@@ -141,7 +146,7 @@ for i in range(nbins):
     print("%.3g\t%.3g\t%.3f\t%.3f" % (binrad[i], binmass, axes[1]/axes[0], axes[2]/axes[0]))
     qs[i] = axes[2]/axes[0]
 
-print("Preparing files for Jeans routine input")
+print("\033[1;33mPreparing files for input into jeans routines\033[0m")
 x  = pos[:,0]
 y  = pos[:,1]
 z  = pos[:,2]
@@ -150,12 +155,12 @@ vy = pos[:,4]
 vz = pos[:,5]
 
 # calculate spherical velocities and radius from cartesian kinematics
-r, v_r_sq, v_theta_sq, v_phi_sq = util.format_dataset(np.transpose([x, y, z, vx, vy, vz]))
+r, vr_sq, vtheta_sq, vphi_sq = util.format_dataset(np.transpose([x, y, z, vx, vy, vz]))
 
 sorter = np.argsort(r)
 x = x[sorter]; y = y[sorter]; z = z[sorter]
 vx = vx[sorter]; vy = vy[sorter]; vz = vz[sorter]
-v_r_sq = v_r_sq[sorter]; v_theta_sq = v_theta_sq[sorter]; v_phi_sq = v_phi_sq[sorter]
+vr_sq = vr_sq[sorter]; vtheta_sq = vtheta_sq[sorter]; vphi_sq = vphi_sq[sorter]
 r = r[sorter]; mass = mass[sorter]
 
 # Define conversions from simulation units to physical units
@@ -177,14 +182,14 @@ vy      = convert(vy, HA_length/HA_time, u.km/u.s)
 vz      = convert(vz, HA_length/HA_time, u.km/u.s)
 r       = convert(r,  HA_length, u.kpc)
 mass    = convert(mass, HA_mass, u.Msun)
-v_r_sq     = convert(v_r_sq,     (HA_length/HA_time)**2, (u.km/u.s)**2)
-v_theta_sq = convert(v_theta_sq, (HA_length/HA_time)**2, (u.km/u.s)**2)
-v_phi_sq   = convert(v_phi_sq,   (HA_length/HA_time)**2, (u.km/u.s)**2)
+vr_sq     = convert(vr_sq,     (HA_length/HA_time)**2, (u.km/u.s)**2)
+vtheta_sq = convert(vtheta_sq, (HA_length/HA_time)**2, (u.km/u.s)**2)
+vphi_sq   = convert(vphi_sq,   (HA_length/HA_time)**2, (u.km/u.s)**2)
 
 np.savetxt(
     fname=f"../data/halo_alone/halo_alone_{q}_prejeans.csv",
     X=np.stack([x, y, z, vx, vy, vz,
-                mass, r, v_r_sq, v_theta_sq, v_phi_sq], axis=1),
+                mass, r, vr_sq, vtheta_sq, vphi_sq], axis=1),
     delimiter=',', header=" x, y, z [kpc], vx, vy, vz [km/s], mass [Msun], gc_radius, vr_sq, vtheta_sq, vphi_sq [km2/s2]"
 )
 
@@ -194,4 +199,4 @@ np.savetxt(
     delimiter=',', header=" r [kpc], M(<r)_true [Msun]"
 )
 
-print(f"FINISHED WITH halo_alone q={np.median(qs):.2f}\n")
+print(f"\033[1;33mFINISHED WITH halo_alone q={np.median(qs):.2f}\033[0m\n")

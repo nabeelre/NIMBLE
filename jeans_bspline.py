@@ -15,11 +15,14 @@ max_knot  = 80  # kpc
 num_knots = 5
 smoothing = 1
 
-# Parameters used in Rehemtulla et al. 2021
+# Parameters used in Rehemtulla et al. 2021 [min_knot, max_knot, num_knots]
 # Sec 4.1
-# TODO
+# halo_alone models: 1 kpc, 70 kpc, 6 knots
+# halo_disk_bulge models: 5 kpc, 80 kpc, 6 knots
 # Sec 4.2
+# plain latte models: 5 kpc, 80 kpc, 5 knots
 # Sec 4.3
+# deconvolution runs: 5 kpc, 80 kpc, 5 knots
 
 
 def rho_eval(S, r):
@@ -140,7 +143,7 @@ if VERBOSE:
     plt.xlim([-1, max_rad*1.1])
     plt.xticks(fontsize=14)
     plt.savefig(f"{results_filepath}vr.pdf", dpi=200, bbox_inches='tight')
-    
+
     plt.figure(figsize=(12.5,8))
     plt.scatter(radii, vtheta_sq, marker='.', c='navy', alpha=0.25, rasterized=True)
     plt.plot(r, vtheta_fit, c='gold')
@@ -150,7 +153,7 @@ if VERBOSE:
     plt.xlim([-1, max_rad*1.1])
     plt.xticks(fontsize=14)
     plt.savefig(f"{results_filepath}vtheta.pdf", dpi=200, bbox_inches='tight')
-    
+
     plt.figure(figsize=(12.5,8))
     plt.scatter(radii, vphi_sq, marker='.', c='navy', alpha=0.25, rasterized=True)
     plt.plot(r, vphi_fit, c='gold')
@@ -198,11 +201,11 @@ if VERBOSE:
         fig = plt.figure(figsize=(12,8))
         gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
         axs = gs.subplots(sharex=True)
-        
+
         axs[0].plot(r, M_jeans, c='navy', linewidth=2.0, label='Jeans Estimated Mass')
         axs[0].plot(true_r, true_M, c='gold', linestyle='dashed', label='True Cumulative Mass')
         axs[1].plot(r, fractional_err(r, true_r, M_jeans, true_M), c='navy', linewidth=2.0, label='Error in Jeans Estimate')
-        
+
         axs[1].axhline(0, c='k', linewidth=0.5)
         axs[1].axhline(0.2, c='k', linewidth=0.5, linestyle='dashdot')
         axs[1].axhline(-0.2, c='k', linewidth=0.5, linestyle='dashdot')
@@ -222,12 +225,12 @@ if VERBOSE:
         ax.set_xlim([0, max_rad*1.1])
         ax.set_ylabel(r"M(<r) [$M_{\odot}$]", size=18)
         ax.set_xlabel('Radius [kpc]', size=16)
-        ax.legend(prop={'size': 16})  
+        ax.legend(prop={'size': 16})
         plt.savefig(f"{results_filepath}Mjeans.pdf", dpi=200, bbox_inches='tight')
 
 np.savetxt(
-    fname=f"{results_filepath}{dataset_name}_{min_knot:.0f}-{max_knot:.0f}-{int(num_knots)}.csv", 
-    X=np.stack([r, M_jeans], axis=1), delimiter=',', 
+    fname=f"{results_filepath}{dataset_name}_{min_knot:.0f}-{max_knot:.0f}-{int(num_knots)}.csv",
+    X=np.stack([r, M_jeans], axis=1), delimiter=',',
     header="radius [kpc], jeans_mass [Msun]"
 )
 
