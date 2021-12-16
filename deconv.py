@@ -1,16 +1,16 @@
 import os, sys, numpy as numpy, emcee, corner, matplotlib.pyplot as plt
 import scipy.special, scipy.optimize, agama
 from pygaia.errors.astrometric import total_proper_motion_uncertainty
-from multiprocessing import Pool
+from multiprocess import Pool
 numpy.set_printoptions(linewidth=200, precision=6, suppress=True)
 numpy.random.seed(42)
 
-SUBSAMPLE = True
+SUBSAMPLE = False
 VERBOSE = True
 
 Gmax  = 20.7   # max apparent G magnitude for a RRL star to enter the selection
 Gmin  = 16.0   # min apparent G magnitude (exclude nearby stars)
-Grrl  = 0.58   # abs.magnitude of RRL (mean value; the actual value for each star is scattered around it) From Iorio&Belokurov2018 
+Grrl  = 0.58   # abs.magnitude of RRL (mean value; the actual value for each star is scattered around it) From Iorio&Belokurov2018
 DMerr = 0.24   # scatter in abs.magnitude
 # assume that the error in distance modulus is purely due to intrinsic scatter in abs.mag
 # (neglect photometric measurement errors, which are likely much smaller even at G=20.7)
@@ -103,8 +103,8 @@ def get_lsr_cartesian(sim, lsr):
 
 
 def rotate_coords(sim, lsr, positions, velocities):
-    # Rotate coordinates of latte simulation (sim = "m12f" or "m12i" or "m12m") 
-    # to put the solar position of the local standard of rest numbered lsr 
+    # Rotate coordinates of latte simulation (sim = "m12f" or "m12i" or "m12m")
+    # to put the solar position of the local standard of rest numbered lsr
     # on the -x axis as required by astropy.coordiantes
     # positions and velocities are an Nx3 matricies with columns x, y, z and vx, vy, vz respectively
     # all coordinates here are galactocentric cartesian
@@ -129,267 +129,198 @@ def rotate_coords(sim, lsr, positions, velocities):
         x_new, y_new, vx_new, vy_new
 
 
-def loadMock(gaiaRele_rse, lattesim, lsr):
-    # Load {sim}_prejeans.csv file written by read_latte.ipynb notebook
-    # files with '_prejeans.csv' have the following properties:
-    # positions in kpc, velocities in km/s, mass in Msun
-    # arranged as [x, y, z, vx, vy, vz, m, gc_radius, vr_sq, vtheta_sq, vphi_sq] 
-    x, y, z, vx, vy, vz, \
-        mass, radii, vr_sq, vtheta_sq, vphi_sq = numpy.loadtxt(f"data/{lattesim}/{lattesim}_prejeans.csv", 
-                                                                unpack=True, skiprows=1, delimiter=',')
+if __name__ == "__main__":
+    def loadMock(gaiaRele_rse, lattesim, lsr):
+        # Load {sim}_prejeans.csv file written by read_latte.ipynb notebook
+        # files with '_prejeans.csv' have the following properties:
+        # positions in kpc, velocities in km/s, mass in Msun
+        # arranged as [x, y, z, vx, vy, vz, m, gc_radius, vr_sq, vtheta_sq, vphi_sq]
+        x, y, z, vx, vy, vz, \
+            mass, radii, vr_sq, vtheta_sq, vphi_sq = numpy.loadtxt(f"data/{lattesim}/{lattesim}_prejeans.csv",
+                                                                    unpack=True, skiprows=1, delimiter=',')
+
+        if SUBSAMPLE:
+            # optionally subsample the dataset down to 1/10th the original size
+            if VERBOSE:
+                print("Number of particles before subsample:", len(x))
+            sample_size = int(len(x)/10)
+
+            sample_idxs = numpy.random.choice(numpy.arange(len(x)), sample_size, replace=False)
+
+            x = x[sample_idxs]; y = y[sample_idxs]; z = z[sample_idxs]
+            vx = vx[sample_idxs]; vy = vy[sample_idxs]; vz = vz[sample_idxs]
+            mass = mass[sample_idxs]; radii = radii[sample_idxs]
+            vr_sq = vr_sq[sample_idxs]; vtheta_sq = vtheta_sq[sample_idxs]; vphi_sq = vphi_sq[sample_idxs]
+            if VERBOSE:
+                print("Number of particles after subsample:", len(x))
+        elif VERBOSE:
+            print("Number of particles:", len(x))
+
+        # Align solar position of LSR{lsr} onto the -x axis for transformations with agama
+        lsr_info, x_new, y_new, vx_new, vy_new = rotate_coords(lattesim, lsr,
+                                                                numpy.column_stack((x, y, z)),
+                                                                numpy.column_stack((vx, vy, vz)))
+
+        xv = numpy.column_stack((x_new, y_new, z, vx_new, vy_new, vz))
+        nbody = len(x_new)
+
+        # True velocity dispersion profiles used later for plotting comparisons
+        truesig_knots = numpy.logspace(0, numpy.log10(200), 15)
+        true_sigmar = agama.splineApprox(numpy.log(truesig_knots), numpy.log(radii), vr_sq)
+        true_sigmat = agama.splineApprox(numpy.log(truesig_knots), numpy.log(radii), (vtheta_sq + vphi_sq)/2)
+
+        # Use agama to get positions and velocities in galactic and equatorial coordinates
+        l, b, dist, pml, pmb, vlos = agama.getGalacticFromGalactocentric(*xv.T, *lsr_info)
+        ra, dec, pmra, pmdec  = agama.transformCelestialCoords(agama.fromGalactictoICRS, l, b, pml, pmb)
+        l   /=d2r;  b   /=d2r   # convert from radians to degrees
+        ra  /=d2r;  dec /=d2r
+        pml /=4.74; pmb /=4.74  # convert from km/s/kpc to mas/yr
+        pmra/=4.74; pmdec/=4.74
+
+        # impose spatial selection based on the survey footprint
+        filt = (abs(b) >= bmin) * (dec >= decmin)
+
+        # compute apparent G-band magnitude and impose a cut Gmin<G<Gmax
+        Gabs = Grrl + numpy.random.normal(size=nbody) * DMerr  # abs.mag with scatter
+        Gapp = Gabs + 5*numpy.log10(dist) + 10  # apparent magnitude
+        filt *= (Gapp > Gmin) * (Gapp < Gmax)
+
+        # Doesnt work with current cov matrix set up
+        # pmracosdec_err, pmdec_err = proper_motion_uncertainty(Gapp, release=gaia_release)  # uas/yr
+        # pmra_err *= 0.001; pmdec_err *= 0.001  # uas/yr -> mas/yr
+
+        # pull magnitude of proper motion errors from pygaia
+        PMerr = total_proper_motion_uncertainty(Gapp, release=gaia_release)  # uas/yr
+        PMerr *= 0.001  # uas/yr -> mas/yr
+
+        # add proper motion errors
+        pmra  += numpy.random.normal(size=nbody) * PMerr
+        pmdec += numpy.random.normal(size=nbody) * PMerr
+
+        # RA, Dec back to radians
+        # go back to galactic coords
+        ra *= d2r
+        dec *= d2r
+        l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
+                                                        ra, dec, pmra, pmdec)
+        l /= d2r
+        b /= d2r
+
+        # add Vlos errors
+        vloserr = numpy.ones(nbody) * 10.0  # km/s
+        vlos += numpy.random.normal(size=nbody) * vloserr
+
+        return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
+                vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat,
+                lsr_info)
+
+    def getSurveyFootprintBoundary(decmin):
+        # determine the range of l as a function of b, resulting from a cut in declination dec>=decmin
+        # (note: the approach is tuned specifically to a constant boundary in declination,
+        # but should work for any value of decmin from -90 to +90)
+        if decmin == -90:  # no restrictions
+            return -numpy.pi/2, numpy.pi/2, lambda b: b*0, numpy.pi
+
+        # 1. obtain the l,b coords of the two poles (south and north) in ICRS
+        lp, bp = agama.transformCelestialCoords(agama.fromICRStoGalactic, [0,0], [-numpy.pi/2, numpy.pi/2])
+        # if decmin < decp[0], there is only one loop around the south ICRS pole,
+        # likewise if decmin > decp[1], there is only one loop around the north ICRS pole,
+        # otherwise there is a boundary spanning the entire range of l
+
+        # 2. find the latitude at which the boundary crosses the meridional lines in l,b containing the poles
+        def rootfinder(b, l0):
+            return agama.transformCelestialCoords(agama.fromGalactictoICRS, l0, b)[1] - decmin*d2r
+        if decmin*d2r < bp[0]:
+            b1 = scipy.optimize.brentq(rootfinder, bp[0], -numpy.pi/2, args=(lp[0],))
+        else:
+            b1 = scipy.optimize.brentq(rootfinder, bp[1], -numpy.pi/2, args=(lp[1],))
+        if decmin*d2r > bp[1]:
+            b2 = scipy.optimize.brentq(rootfinder, bp[1], +numpy.pi/2, args=(lp[1],))
+        else:
+            b2 = scipy.optimize.brentq(rootfinder, bp[0], +numpy.pi/2, args=(lp[0],))
+
+        # 3. construct a boundary - minimum l for each b between b1 and b2
+        npoints = 201
+        bb = numpy.linspace(0, 1, npoints)
+        bb = bb*bb*(3-2*bb) * (b2-b1) + b1
+        ll = numpy.zeros(npoints)
+        ll[0] = lp[0] if decmin*d2r < bp[0] else lp[1]
+        ll[-1]= lp[1] if decmin*d2r > bp[1] else lp[0]
+        for i in range(1,npoints-1):
+            ll[i] = scipy.optimize.brentq(
+                lambda l: agama.transformCelestialCoords(agama.fromGalactictoICRS, l, bb[i])[1] - decmin*d2r,
+                lp[0], lp[1])
+        curve = agama.CubicSpline(bb, ll)
+
+        # 4. return a tuple of four elements:
+        #   lower and upper limit on b,
+        #   a function evaluating lmin for the given b,
+        #   and lsym such that lmax(b) = 2*lsym - lmin(b).
+        # note that all coords here are in radians, and the range of l is from lsym-pi to lsym+pi (or smaller),
+        # not from 0 to 2pi or -pi to pi; thus the selection boundary doesn't enclose the actual coordinates
+        # of points unless these are shifted to the same angular range, but this doesn't matter for the purpose
+        # of computing the normalization factor (integral of density over the selection region)
+        if decmin*d2r < bp[0]:
+            # excluded a region inside a closed loop aroung South pole; b can be anywhere between -pi/2 and pi/2
+            return -numpy.pi/2, numpy.pi/2, lambda b: curve(b, ext=lp[0]), lp[1]
+        elif decmin*d2r <= bp[1]:
+            # excluded a region below a curve spanning the entire range of l; b must be >= b1
+            return b1, numpy.pi/2, lambda b: curve(b, ext=lp[0]), lp[1]
+        else:  # excluded a region outside a closed loop around North pole; b must be between b1 and b2
+            return b1, b2, lambda b: curve(b, ext=lp[1]), lp[1]
+
+    if len(sys.argv) == 4:
+        lattesim = sys.argv[1].lower()
+        lsr = sys.argv[2].upper()
+        gaia_release = sys.argv[3].lower()
+
+        assert(gaia_release in ['dr3', 'dr4', 'dr5'])
+        assert(lattesim in ['m12f', 'm12i', 'm12m'])
+        assert(lsr in ['LSR0', 'LSR1', 'LSR2'])
+
+        print(f"RUNNING LATTE {lattesim} {lsr} {gaia_release}{' with 1/10 subsample' if SUBSAMPLE else ''}")
+    else:
+        print("Too few or too many command line arguments")
+        exit()
+
+    l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
+        lsr_info = loadMock(gaia_release, lattesim, lsr)
+    if VERBOSE: print('Number of particles in survey volume:', len(l))
+
+    figs_path = f"results/deconv_{lattesim}_{lsr}_{gaia_release}/"
 
     if SUBSAMPLE:
-        # optionally subsample the dataset down to 1/10th the original size
-        if VERBOSE:
-            print("Number of particles before subsample:", len(x))
-        sample_size = int(len(x)/10)
-        
-        sample_idxs = numpy.random.choice(numpy.arange(len(x)), sample_size, replace=False)
+        figs_path += "sub/"
 
-        x = x[sample_idxs]; y = y[sample_idxs]; z = z[sample_idxs]
-        vx = vx[sample_idxs]; vy = vy[sample_idxs]; vz = vz[sample_idxs]
-        mass = mass[sample_idxs]; radii = radii[sample_idxs]
-        vr_sq = vr_sq[sample_idxs]; vtheta_sq = vtheta_sq[sample_idxs]; vphi_sq = vphi_sq[sample_idxs]
-        if VERBOSE:
-            print("Number of particles after subsample:", len(x))
-    elif VERBOSE:
-        print("Number of particles:", len(x))
+    if not os.path.exists(figs_path):
+        os.makedirs(figs_path)
+        if VERBOSE: print("created output directory for figures at " + figs_path)
 
-    # Align solar position of LSR{lsr} onto the -x axis for transformations with agama
-    lsr_info, x_new, y_new, vx_new, vy_new = rotate_coords(lattesim, lsr,
-                                                            numpy.column_stack((x, y, z)),
-                                                            numpy.column_stack((vx, vy, vz)))
+    blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
 
-    xv = numpy.column_stack((x_new, y_new, z, vx_new, vy_new, vz))
-    nbody = len(x_new)
+    # diagnostic plot showing the stars in l,b and the selection region boundary
+    if VERBOSE:
+        plt.scatter(l, b, s=2, c=Gapp, cmap='hell', vmin=Gmin, vmax=Gmax+1, edgecolors='none', rasterized=True)
+        plt.colorbar(label='Gapp')
+        if blow <= -bmin*d2r:  # selection region in the southern Galactic hemisphere
+            bb=numpy.linspace(blow, -bmin*d2r, 100)
+            l1=lmin(bb)
+            l2=2*lsym-l1
+            plt.plot(numpy.hstack((l1, l2[::-1], l1[0])) / d2r, numpy.hstack((bb, bb[::-1], bb[0])) / d2r, 'g')
+        if bupp >= bmin*d2r:  # selection region in the northern Galactic hemisphere
+            bb=numpy.linspace(bupp, bmin*d2r, 100)
+            l1=lmin(bb)
+            l2=2*lsym-l1
+            plt.plot(numpy.hstack((l1, l2[::-1], l1[0])) / d2r, numpy.hstack((bb, bb[::-1], bb[0])) / d2r, 'g')
+        plt.title(figs_path)
+        plt.xlabel('galactic longitude l (degrees)')
+        plt.ylabel('galactic latitude b (degrees)')
+        plt.tight_layout()
+        plt.savefig(figs_path+"sel_bounds.pdf", dpi=200, bbox_inches='tight')
+        plt.cla()
 
-    # True velocity dispersion profiles used later for plotting comparisons
-    truesig_knots = numpy.logspace(0, numpy.log10(200), 15)
-    true_sigmar = agama.splineApprox(numpy.log(truesig_knots), numpy.log(radii), vr_sq)
-    true_sigmat = agama.splineApprox(numpy.log(truesig_knots), numpy.log(radii), (vtheta_sq + vphi_sq)/2)
-
-    # Use agama to get positions and velocities in galactic and equatorial coordinates
-    l, b, dist, pml, pmb, vlos = agama.getGalacticFromGalactocentric(*xv.T, *lsr_info)
-    ra, dec, pmra, pmdec  = agama.transformCelestialCoords(agama.fromGalactictoICRS, l, b, pml, pmb)
-    l   /=d2r;  b   /=d2r   # convert from radians to degrees
-    ra  /=d2r;  dec /=d2r
-    pml /=4.74; pmb /=4.74  # convert from km/s/kpc to mas/yr
-    pmra/=4.74; pmdec/=4.74
-
-    # impose spatial selection based on the survey footprint
-    filt = (abs(b) >= bmin) * (dec >= decmin)
-
-    # compute apparent G-band magnitude and impose a cut Gmin<G<Gmax
-    Gabs = Grrl + numpy.random.normal(size=nbody) * DMerr  # abs.mag with scatter
-    Gapp = Gabs + 5*numpy.log10(dist) + 10  # apparent magnitude
-    filt *= (Gapp > Gmin) * (Gapp < Gmax)
-
-    # Doesnt work with current cov matrix set up
-    # pmracosdec_err, pmdec_err = proper_motion_uncertainty(Gapp, release=gaia_release)  # uas/yr
-    # pmra_err *= 0.001; pmdec_err *= 0.001  # uas/yr -> mas/yr
-
-    # pull magnitude of proper motion errors from pygaia
-    PMerr = total_proper_motion_uncertainty(Gapp, release=gaia_release)  # uas/yr
-    PMerr *= 0.001  # uas/yr -> mas/yr
-
-    # add proper motion errors
-    pmra  += numpy.random.normal(size=nbody) * PMerr
-    pmdec += numpy.random.normal(size=nbody) * PMerr
-
-    # RA, Dec back to radians
-    # go back to galactic coords
-    ra *= d2r
-    dec *= d2r
-    l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
-                                                    ra, dec, pmra, pmdec)
-    l /= d2r
-    b /= d2r
-
-    # add Vlos errors
-    vloserr = numpy.ones(nbody) * 10.0  # km/s
-    vlos += numpy.random.normal(size=nbody) * vloserr
-
-    if False:
-        # write error imposed data to disk here
-        dist_obs = 10**(0.2*(Gapp[filt]-Grrl)-2)
-        x,y,z,vx,vy,vz = agama.getGalactocentricFromGalactic(l[filt]*d2r, b[filt]*d2r, dist_obs, 
-                                                            pml[filt]*4.74, pmb[filt]*4.74, vlos[filt], *lsr_info)
-
-        error_imposed = numpy.stack([x,y,z,vx,vy,vz], axis=1)
-        numpy.savetxt(
-            fname=f"private/error_imposed_{gaia_release}.csv", X=error_imposed, delimiter=',', header="x,y,z,vx,vy,vz"
-        )
-        exit(1)
-
-    return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
-            vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat,
-            lsr_info)
-
-
-def getSurveyFootprintBoundary(decmin):
-    # determine the range of l as a function of b, resulting from a cut in declination dec>=decmin
-    # (note: the approach is tuned specifically to a constant boundary in declination,
-    # but should work for any value of decmin from -90 to +90)
-    if decmin == -90:  # no restrictions
-        return -numpy.pi/2, numpy.pi/2, lambda b: b*0, numpy.pi
-
-    # 1. obtain the l,b coords of the two poles (south and north) in ICRS
-    lp, bp = agama.transformCelestialCoords(agama.fromICRStoGalactic, [0,0], [-numpy.pi/2, numpy.pi/2])
-    # if decmin < decp[0], there is only one loop around the south ICRS pole,
-    # likewise if decmin > decp[1], there is only one loop around the north ICRS pole,
-    # otherwise there is a boundary spanning the entire range of l
-
-    # 2. find the latitude at which the boundary crosses the meridional lines in l,b containing the poles
-    def rootfinder(b, l0):
-        return agama.transformCelestialCoords(agama.fromGalactictoICRS, l0, b)[1] - decmin*d2r
-    if decmin*d2r < bp[0]:
-        b1 = scipy.optimize.brentq(rootfinder, bp[0], -numpy.pi/2, args=(lp[0],))
-    else:
-        b1 = scipy.optimize.brentq(rootfinder, bp[1], -numpy.pi/2, args=(lp[1],))
-    if decmin*d2r > bp[1]:
-        b2 = scipy.optimize.brentq(rootfinder, bp[1], +numpy.pi/2, args=(lp[1],))
-    else:
-        b2 = scipy.optimize.brentq(rootfinder, bp[0], +numpy.pi/2, args=(lp[0],))
-
-    # 3. construct a boundary - minimum l for each b between b1 and b2
-    npoints = 201
-    bb = numpy.linspace(0, 1, npoints)
-    bb = bb*bb*(3-2*bb) * (b2-b1) + b1
-    ll = numpy.zeros(npoints)
-    ll[0] = lp[0] if decmin*d2r < bp[0] else lp[1]
-    ll[-1]= lp[1] if decmin*d2r > bp[1] else lp[0]
-    for i in range(1,npoints-1):
-        ll[i] = scipy.optimize.brentq(
-            lambda l: agama.transformCelestialCoords(agama.fromGalactictoICRS, l, bb[i])[1] - decmin*d2r,
-            lp[0], lp[1])
-    curve = agama.CubicSpline(bb, ll)
-
-    # 4. return a tuple of four elements:
-    #   lower and upper limit on b,
-    #   a function evaluating lmin for the given b,
-    #   and lsym such that lmax(b) = 2*lsym - lmin(b).
-    # note that all coords here are in radians, and the range of l is from lsym-pi to lsym+pi (or smaller),
-    # not from 0 to 2pi or -pi to pi; thus the selection boundary doesn't enclose the actual coordinates
-    # of points unless these are shifted to the same angular range, but this doesn't matter for the purpose
-    # of computing the normalization factor (integral of density over the selection region)
-    if decmin*d2r < bp[0]:
-        # excluded a region inside a closed loop aroung South pole; b can be anywhere between -pi/2 and pi/2
-        return -numpy.pi/2, numpy.pi/2, lambda b: curve(b, ext=lp[0]), lp[1]
-    elif decmin*d2r <= bp[1]:
-        # excluded a region below a curve spanning the entire range of l; b must be >= b1
-        return b1, numpy.pi/2, lambda b: curve(b, ext=lp[0]), lp[1]
-    else:  # excluded a region outside a closed loop around North pole; b must be between b1 and b2
-        return b1, b2, lambda b: curve(b, ext=lp[1]), lp[1]
-
-
-if len(sys.argv) == 4:
-    lattesim = sys.argv[1].lower()
-    lsr = sys.argv[2].upper()
-    gaia_release = sys.argv[3].lower()
-
-    assert(gaia_release in ['dr3', 'dr4', 'dr5'])
-    assert(lattesim in ['m12f', 'm12i', 'm12m'])
-    assert(lsr in ['LSR0', 'LSR1', 'LSR2'])
-
-    print(f"RUNNING LATTE {lattesim} {lsr} {gaia_release}{' with 1/10 subsample' if SUBSAMPLE else ''}")
-else:
-    print("Too few or too many command line arguments")
-    exit()
-    
-l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
-    lsr_info = loadMock(gaia_release, lattesim, lsr)
-if VERBOSE: print('Number of particles in survey volume:', len(l))
-
-figs_path = f"results/deconv_{lattesim}_{lsr}_{gaia_release}/"
-
-if SUBSAMPLE:
-    figs_path += "sub/"
-
-if not os.path.exists(figs_path):
-    os.makedirs(figs_path)
-    if VERBOSE: print("created output directory for figures at " + figs_path)
-
-blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
-
-# diagnostic plot showing the stars in l,b and the selection region boundary
-if VERBOSE:
-    plt.scatter(l, b, s=2, c=Gapp, cmap='hell', vmin=Gmin, vmax=Gmax+1, edgecolors='none', rasterized=True)
-    plt.colorbar(label='Gapp')
-    if blow <= -bmin*d2r:  # selection region in the southern Galactic hemisphere
-        bb=numpy.linspace(blow, -bmin*d2r, 100)
-        l1=lmin(bb)
-        l2=2*lsym-l1
-        plt.plot(numpy.hstack((l1, l2[::-1], l1[0])) / d2r, numpy.hstack((bb, bb[::-1], bb[0])) / d2r, 'g')
-    if bupp >= bmin*d2r:  # selection region in the northern Galactic hemisphere
-        bb=numpy.linspace(bupp, bmin*d2r, 100)
-        l1=lmin(bb)
-        l2=2*lsym-l1
-        plt.plot(numpy.hstack((l1, l2[::-1], l1[0])) / d2r, numpy.hstack((bb, bb[::-1], bb[0])) / d2r, 'g')
-    plt.title(figs_path)
-    plt.xlabel('galactic longitude l (degrees)')
-    plt.ylabel('galactic latitude b (degrees)')
-    plt.tight_layout()
-    plt.savefig(figs_path+"sel_bounds.pdf", dpi=200, bbox_inches='tight')
-    plt.cla()
-
-# this used to be a function, but the MCMC parallelization doesn't work unless the likelihood fnc
-# is in the global scope (possibly fixed in the latest EMCEE version - haven't checked)
-if True:
-    npoints = len(l)
-
-    # convert l,b,dist.mod. of all stars into logarithm of Galactocentric radius (observed, not true)
-    # unit conversion: degrees to radians for l,b,  mas/yr to km/s/kpc for PM
-    dist_obs = 10**(0.2*(Gapp-Grrl)-2)
-    x,y,z,vx,vy,vz = agama.getGalactocentricFromGalactic(
-        l*d2r, b*d2r, dist_obs, pml*4.74, pmb*4.74, vlos, *lsr_info)
-    logr_obs = 0.5 * numpy.log(x**2 + y**2 + z**2)
-    vr_obs = (x*vx+y*vy+z*vz) / numpy.exp(logr_obs)
-    vt_obs = (0.5 * (vx**2+vy**2+vz**2 - vr_obs**2))**0.5
-
-    # create random samples from the distance modulus uncertainty for each star and convert to Galactocentric r
-    nsamples = 20  # number of random samples per star
-    Gsamp = (numpy.random.normal(size=(npoints, nsamples)) * DMerr + Gapp[:,None]).reshape(-1)
-    dist_samp = 10**(0.2*(Gsamp-Grrl)-2)
-    x,y,z = agama.getGalactocentricFromGalactic(
-        numpy.repeat(l * d2r, nsamples), numpy.repeat(b * d2r, nsamples), dist_samp, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2])
-    R = (x**2 + y**2)**0.5
-    r = (x**2 + y**2 + z**2)**0.5  # array of samples for Galactocentric radius
-    logr_samp = numpy.log(r)
-
-    # a rather clumsy way of constructing the matrices describing how the intrinsic 3d velocity dispersions
-    # are translated to the Vlos and PM dispersions at each data sample:
-    # first compute the expected mean values (pml, pmb, vlos) for a star at rest at a given distance,
-    # then repeat the exercise 3 times, setting one of velocity components (v_r, v_theta, v_phi)
-    # to 1 km/s, and subtract from the zero-velocity projection.
-    vel0 = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x*0, y*0, z*0, *lsr_info)[3:6])
-    velr = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x/r, y/r, z/r, *lsr_info)[3:6]) - vel0
-    velt = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, z/r*x/R, z/r*y/R, -R/r, *lsr_info)[3:6]) - vel0
-    velp = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, -y/R, x/R, 0*r, *lsr_info)[3:6]) - vel0
-
-    # matrix of shape (2, npoints*nsamples) describing how the two intrinsic velocity dispersions
-    # in 3d Galactocentric coords translate to the line-of-sight velocity dispersion at each sample point
-    mat_vlos = numpy.array([ velr[2]**2, velt[2]**2 + velp[2]**2 ])
-    # same for the PM dispersions: this is a 2x2 symmetric matrix for each datapoint,
-    # characterized by two diagonal and one off-diagonal elements,
-    # and each element, in turn, is computed from the two Galactocentric intrinsic velocity dispersions
-    mat_pm   = numpy.array([
-        [velr[0]*velr[0], velt[0]*velt[0] + velp[0]*velp[0]],
-        [velr[1]*velr[1], velt[1]*velt[1] + velp[1]*velp[1]],
-        [velr[0]*velr[1], velt[0]*velt[1] + velp[0]*velp[1]] ]) / 4.74**2
-
-    # difference between the measured PM and Vlos values and the expected mean values at each data sample
-    # (the latter correspond to a zero 3d velocity, translated to the Heliocentric frame)
-    pml_samp  = numpy.repeat(pml,  nsamples) - vel0[0] / 4.74
-    pmb_samp  = numpy.repeat(pmb,  nsamples) - vel0[1] / 4.74
-    vlos_samp = numpy.repeat(vlos, nsamples) - vel0[2]
-    # vectors of PM and Vlos errors for each data sample, to be added to the model covariance matrices
-    pmlerr2_samp  = numpy.repeat(PMerr, nsamples)**2
-    pmberr2_samp  = numpy.repeat(PMerr, nsamples)**2   # here is identical to pml, but in general may be different
-    vloserr2_samp = numpy.repeat(vloserr, nsamples)**2
-
-    # knots in Galactocentric radius (minimum is imposed by our cut |b|>30, maximum - by the extent of data)
-    knots_logr = numpy.linspace(numpy.log(min_knot), numpy.log(max_knot), num_knots)
-
+    # this used to be a function, but the MCMC parallelization doesn't work unless the likelihood fnc
+    # is in the global scope (possibly fixed in the latest EMCEE version - haven't checked)
     def modelDensity(params, truedens=False):
         # params is the array of logarithms of density at radial knots, which must monotonically decrease
         # note that since the result is invariant w.r.t. the overall amplitude of the density
@@ -624,6 +555,61 @@ if True:
             histograms = numpy.stack([numpy.repeat(rhist,2)[1:-1], numpy.repeat(rho_obs, 2), numpy.repeat(sigmar_obs, 2), numpy.repeat(sigmat_obs, 2)], axis=1)
             write_csv(histograms, "veldisp_dens_hists.csv", "rgrid, dens, sigmar, sigmat")
 
+    npoints = len(l)
+
+    # convert l,b,dist.mod. of all stars into logarithm of Galactocentric radius (observed, not true)
+    # unit conversion: degrees to radians for l,b,  mas/yr to km/s/kpc for PM
+    dist_obs = 10**(0.2*(Gapp-Grrl)-2)
+    x,y,z,vx,vy,vz = agama.getGalactocentricFromGalactic(
+        l*d2r, b*d2r, dist_obs, pml*4.74, pmb*4.74, vlos, *lsr_info)
+    logr_obs = 0.5 * numpy.log(x**2 + y**2 + z**2)
+    vr_obs = (x*vx+y*vy+z*vz) / numpy.exp(logr_obs)
+    vt_obs = (0.5 * (vx**2+vy**2+vz**2 - vr_obs**2))**0.5
+
+    # create random samples from the distance modulus uncertainty for each star and convert to Galactocentric r
+    nsamples = 20  # number of random samples per star
+    Gsamp = (numpy.random.normal(size=(npoints, nsamples)) * DMerr + Gapp[:,None]).reshape(-1)
+    dist_samp = 10**(0.2*(Gsamp-Grrl)-2)
+    x,y,z = agama.getGalactocentricFromGalactic(
+        numpy.repeat(l * d2r, nsamples), numpy.repeat(b * d2r, nsamples), dist_samp, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2])
+    R = (x**2 + y**2)**0.5
+    r = (x**2 + y**2 + z**2)**0.5  # array of samples for Galactocentric radius
+    logr_samp = numpy.log(r)
+
+    # a rather clumsy way of constructing the matrices describing how the intrinsic 3d velocity dispersions
+    # are translated to the Vlos and PM dispersions at each data sample:
+    # first compute the expected mean values (pml, pmb, vlos) for a star at rest at a given distance,
+    # then repeat the exercise 3 times, setting one of velocity components (v_r, v_theta, v_phi)
+    # to 1 km/s, and subtract from the zero-velocity projection.
+    vel0 = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x*0, y*0, z*0, *lsr_info)[3:6])
+    velr = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, x/r, y/r, z/r, *lsr_info)[3:6]) - vel0
+    velt = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, z/r*x/R, z/r*y/R, -R/r, *lsr_info)[3:6]) - vel0
+    velp = numpy.array(agama.getGalacticFromGalactocentric(x, y, z, -y/R, x/R, 0*r, *lsr_info)[3:6]) - vel0
+
+    # matrix of shape (2, npoints*nsamples) describing how the two intrinsic velocity dispersions
+    # in 3d Galactocentric coords translate to the line-of-sight velocity dispersion at each sample point
+    mat_vlos = numpy.array([ velr[2]**2, velt[2]**2 + velp[2]**2 ])
+    # same for the PM dispersions: this is a 2x2 symmetric matrix for each datapoint,
+    # characterized by two diagonal and one off-diagonal elements,
+    # and each element, in turn, is computed from the two Galactocentric intrinsic velocity dispersions
+    mat_pm   = numpy.array([
+        [velr[0]*velr[0], velt[0]*velt[0] + velp[0]*velp[0]],
+        [velr[1]*velr[1], velt[1]*velt[1] + velp[1]*velp[1]],
+        [velr[0]*velr[1], velt[0]*velt[1] + velp[0]*velp[1]] ]) / 4.74**2
+
+    # difference between the measured PM and Vlos values and the expected mean values at each data sample
+    # (the latter correspond to a zero 3d velocity, translated to the Heliocentric frame)
+    pml_samp  = numpy.repeat(pml,  nsamples) - vel0[0] / 4.74
+    pmb_samp  = numpy.repeat(pmb,  nsamples) - vel0[1] / 4.74
+    vlos_samp = numpy.repeat(vlos, nsamples) - vel0[2]
+    # vectors of PM and Vlos errors for each data sample, to be added to the model covariance matrices
+    pmlerr2_samp  = numpy.repeat(PMerr, nsamples)**2
+    pmberr2_samp  = numpy.repeat(PMerr, nsamples)**2   # here is identical to pml, but in general may be different
+    vloserr2_samp = numpy.repeat(vloserr, nsamples)**2
+
+    # knots in Galactocentric radius (minimum is imposed by our cut |b|>30, maximum - by the extent of data)
+    knots_logr = numpy.linspace(numpy.log(min_knot), numpy.log(max_knot), num_knots)
+
     # initial values of parameters
     params_dens    = -numpy.linspace(1, 3, len(knots_logr)-1)**2  # log of (un-normalized) density values at radial knots
     params_sigmar  = numpy.zeros(len(knots_logr)) + 5.0   # log of radial velocity dispersion values at the radial knots
@@ -690,8 +676,8 @@ if True:
             converged = abs(maxloglike-prevmaxloglike) < 1.0 and abs(avgloglike-prevavgloglike) < 2.0
             prevmaxloglike = maxloglike
             prevavgloglike = avgloglike
-            if converged: 
-                if VERBOSE: print('Converged'); 
+            if converged:
+                if VERBOSE: print('Converged');
                 plotprofiles(chain[::20], "converged")
 
             # produce diagnostic plots after each MCMC episode:
@@ -739,7 +725,7 @@ if True:
             match_idx = (numpy.abs(r_true - r_est[i])).argmin()
             frac_error[i] = (M_est[i]-M_true[match_idx])/M_true[match_idx]
         return frac_error
-    
+
     # Read the _true.csv file written by read_latte.ipynb
     # files with '_true.csv' have the following properties:
     # radius in kpc, mass in Msun

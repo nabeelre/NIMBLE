@@ -116,7 +116,7 @@ q = np.log(r)
 
 if 'halo_alone' in filepath:
     rad_mask = [(radii >= min_knot) * (radii <= max_knot)]
-    radii = radii[tuple(rad_mask)]; vr_sq = vr_sq[tuple(rad_mask)]; 
+    radii = radii[tuple(rad_mask)]; vr_sq = vr_sq[tuple(rad_mask)];
     vtheta_sq = vtheta_sq[tuple(rad_mask)]; vphi_sq = vphi_sq[tuple(rad_mask)]
 
 # Fit cubic spline in log to square of each spherical velocity component
