@@ -105,7 +105,7 @@ def get_lsr_cartesian(sim, lsr):
 def rotate_coords(sim, lsr, positions, velocities):
     # Rotate coordinates of latte simulation (sim = "m12f" or "m12i" or "m12m")
     # to put the solar position of the local standard of rest numbered lsr
-    # on the -x axis as required by astropy.coordiantes
+    # on the -x axis as required by agama
     # positions and velocities are an Nx3 matricies with columns x, y, z and vx, vy, vz respectively
     # all coordinates here are galactocentric cartesian
     x_sun_orig, y_sun_orig, z_sun_orig, \

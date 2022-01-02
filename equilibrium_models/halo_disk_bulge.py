@@ -30,8 +30,8 @@ def printoutInfo(model, iteration):
     # pot0 = model.potential.potential(0,0,0) - model.potential[0].potential(0,0,0)
 
 
-# True: give the halo a Cuddeford-Osipkov-Merrit velocity anisotropy parameter
-osipkov_merrit = True  # abbreviated to OM in filenames
+# True: give the halo a Cuddeford-Osipkov-Merrit velocity anisotropy profile
+osipkov_merrit = False  # abbreviated to OM in filenames
 # True: also run variant with disk stars contaminating halo sample
 disk_contam = True # abbreviated to DC in filenames
 
