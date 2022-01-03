@@ -1,28 +1,5 @@
 import sys, os, numpy as np, matplotlib.pyplot as plt, matplotlib.ticker as tk, agama
 
-# Make intermediate plots (velocity and density profiles) and diagnostic print statements
-VERBOSE = True
-
-G = 4.3e-6 # kpc km2 Msun-1 s-2
-
-# Plotting parameters
-min_rad = 1
-max_rad = 100
-
-# B-SPLINE PARAMETERS - USED FOR ALL B-SPLINES
-min_knot  = 5   # kpc
-max_knot  = 80  # kpc
-num_knots = 5
-
-# Parameters used in Rehemtulla et al. 2021 [min_knot, max_knot, num_knots]
-# Sec 4.1
-# halo_alone models: 1 kpc, 70 kpc, 6 knots
-# halo_disk_bulge models: 5 kpc, 80 kpc, 6 knots
-# Sec 4.2
-# plain latte models: 5 kpc, 80 kpc, 5 knots
-# Sec 4.3
-# deconvolution runs: 5 kpc, 80 kpc, 5 knots
-
 
 def rho_eval(S, r):
     """
@@ -55,15 +32,19 @@ def fractional_err(r, r_true, M, M_true):
     return frc_error
 
 
+# Make intermediate plots (velocity and density profiles) and diagnostic print statements
+VERBOSE = True
+
+G = 4.3e-6 # kpc km2 Msun-1 s-2
+
 if len(sys.argv) < 2 or len(sys.argv) > 3:
     print("Cannot understand command line args")
     exit()
 
 filepath = sys.argv[1]
 
-TRUE_PROVIDED = False
-if len(sys.argv) == 3:
-    TRUE_PROVIDED = True
+TRUE_PROVIDED = len(sys.argv) == 3
+if TRUE_PROVIDED:
     true_filepath = sys.argv[2]
 
 if "_prejeans.csv" in filepath:
@@ -79,9 +60,38 @@ if "_prejeans.csv" in filepath:
 
     dataset_name = os.path.basename(filepath)[0:-len("_prejeans.csv")]
 else:
-    print("read custom formatted file here")
-    # Make sure to match expected units or adjust G and plot labels
+    print("add handling for non '_prejeans.csv' files")
+    # Make sure to match expected units or adjust G and the plot labels
     exit()
+
+if "halo_alone" in dataset_name:
+    min_rad = 1    # kpc
+    max_rad = 70   # kpc
+
+    min_knot  = 1  # kpc
+    max_knot  = 70 # kpc
+    num_knots = 6
+elif "halo_disk_bulge" in dataset_name:
+    min_rad = 1    # kpc
+    max_rad = 100  # kpc
+
+    min_knot  = 5  # kpc
+    max_knot  = 80 # kpc
+    num_knots = 6
+elif "m12" in dataset_name:
+    min_rad = 1    # kpc
+    max_rad = 100  # kpc
+
+    min_knot  = 5  # kpc
+    max_knot  = 80 # kpc
+    num_knots = 5
+else:  # edit B-spline and plotting parameters for custom file here
+    min_rad = 1    # kpc
+    max_rad = 100  # kpc
+
+    min_knot  = 5  # kpc
+    max_knot  = 80 # kpc
+    num_knots = 6
 
 if VERBOSE:
     print(f"Found {len(radii)} particles in {filepath}")
@@ -188,7 +198,7 @@ if VERBOSE:
     ax.yaxis.set_major_formatter(tk.ScalarFormatter())
     plt.savefig(f"{results_filepath}ln_rho.pdf", dpi=200, bbox_inches='tight')
 
-# Split Spherical Jeans Eq (Eq. 1 in Rehemtulla et al. 2021) into three terms
+# Split Spherical Jeans Eq (Eq. 1 in Rehemtulla et al. 2022) into three terms
 a = -dlnrho_dlnr
 b = -dvr/vr_fit
 c = -2*beta
