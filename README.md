@@ -39,11 +39,17 @@ In this example I've optionally added `OM` which creates the variant with a Cudd
 
 The process of running NIMBLE's inverse modeling Jeans routine on these and plotting a comparison figure is done identically for these and the `halo_alone` datasets. Do note that the disk contamination variants share a `_true.csv` file with their non-disk contamination parents so there will be no `HDB_DC_true.csv` file.
 
-
-
 ### Testing with Latte FIRE-2 galaxies (without observational effects)
 
-Documentation WIP
+Running with the inverse modeling routine on error-free Latte data comes with the additional complication of having to download the Latte data. `run_latte_errorfree.sh` explains what data is needed and where it should be downloaded from ([yt Hub](https://girder.hub.yt/#collection/5b0427b2e9914800018237da/folder/5b211e42323d120001c7a813)).  Once the data is downloaded for each Latte galaxy of interest, `run_latte_errorfree.sh` will prepare the mocks, run the inverse modeling Jeans routine on them, and plot a figure of the resulting mass profiles. 
+
+As usual, all these steps can be performed manually with the individual scripts if desired.
+
+```bash
+python3 read_latte.py m12f
+```
+
+Running the above command will create the `_prejeans.csv` and `_true.csv` files for m12f used for Jeans modeling. This will also require the `gizmo_read` package, also available at [yt Hub](https://girder.hub.yt/#collection/5b0427b2e9914800018237da/folder/5b211e42323d120001c7a813). You can then run the inverse modeling Jeans routine in `jeans_bspline.py` similarly to `halo_alone` datasets by providing the paths to these two `.csv` files. The Jeans routine will automatically select the knot configurations shown in Rehemtulla+2022 but can still be configured to use custom knots.  
 
 ### Testing with Latte FIRE-2 galaxies (with observational effects and the deconvolution subroutine)
 

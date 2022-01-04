@@ -59,7 +59,6 @@ if fig_to_make == 'halo_alone':
     for i in range(len(qs)):
         read(i, f"{home_path}/results/halo_alone_{qs[i]}/halo_alone_{qs[i]}_1-70-6.csv",
                 f"{home_path}/data/halo_alone/halo_alone_{qs[i]}_true.csv")
-
 elif fig_to_make == 'halo_disk_bulge':
     names = ['HDB_OM', 'HDB_DC', 'HDB']
     N = len(names)
@@ -67,17 +66,24 @@ elif fig_to_make == 'halo_disk_bulge':
     colors = ['#1BA1DA', '#CBA415', '#090C9B']
     vert_shift = [0, 0.275e12, 0.55e12]
     label_pos = [(80, 0.3), (80, 0.45), (80, 0.6), (62, 0.1)]
-    labels = ['w/ Osipkov-Meritt', 'w/ disk contam.', 'Original HDB']
+    labels = [f'w/ Osipkov-Meritt{marker[0]}', f'w/ disk contam.{marker[1]}', f'Original HDB{marker[2]}']
 
     for i in range(N):
         # Note that HBD and HDB_DC share the same _true.csv file
         read(i, f"{home_path}/results/{names[i]}/{names[i]}_5-80-6.csv",
                 f"{home_path}/data/halo_disk_bulge/{'HDB' if names[i]=='HDB_DC' else names[i]}_true.csv")
-
 elif fig_to_make == 'latte':
-    print("WIP")
-    exit()
+    gals = ["m12m", "m12i", "m12f"]
+    N = len(gals)
+    max_rad = 110
+    colors = ['#097575', '#bf6c06', '#4a0078']
+    vert_shift = [0, 0.42e12, 0.65e12]
+    label_pos = [(98, 0.3), (98, 0.45), (98, 0.6), (62, 0.1)]
+    labels = [gal + mark for (gal, mark) in zip(gals, marker)]
 
+    for i in range(N):
+        read(i, f"{home_path}/results/{gals[i]}/{gals[i]}_5-80-5.csv",
+                f"{home_path}/data/{gals[i]}/{gals[i]}_true.csv")
 else:
     print("Could not understand which figure to make")
     exit()
