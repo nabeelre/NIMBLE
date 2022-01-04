@@ -8,6 +8,7 @@
 # other axis ratios not shown in Rehemtulla+2022 including q=0.9, and q=0.7
 
 # Axis ratios to model
+# if you change these makes the corresponding changes in the halo_alone branch of fig3-5.py
 qs=('0.6' '0.8' '1.0')
 
 for q in "${qs[@]}"; do
@@ -18,4 +19,4 @@ for q in "${qs[@]}"; do
 done
 
 # Create figure in the style of Fig. 3 in Rehemtulla+2022
-python3 figures/fig3.py
+python3 figures/fig3-5.py halo_alone

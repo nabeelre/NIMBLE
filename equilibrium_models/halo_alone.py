@@ -1,3 +1,8 @@
+"""
+Construction of a one-component (only halo) equilibrium model of a galaxy.
+Adapted from example_self_consistent_model.py in Agama (https://github.com/GalacticDynamics-Oxford/Agama)
+"""
+
 import os, sys, numpy as np, matplotlib.pyplot as plt, astropy.units as u, agama
 import jeans_util as util
 

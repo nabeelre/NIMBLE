@@ -1,6 +1,5 @@
-#!/usr/bin/python
 """
-Construction of a three-component disk-bulge-halo equilibrium model of a galaxy.
+Construction of a three-component halo-disk-bulge equilibrium model of a galaxy.
 Adapted from example_self_consistent_model.py in Agama (https://github.com/GalacticDynamics-Oxford/Agama)
 This example differs in that it has a somewhat simpler structure (only a single stellar disk
 component, no stellar halo or gas disk).
@@ -8,8 +7,7 @@ component, no stellar halo or gas disk).
 
 import os, sys, numpy as np, matplotlib.pyplot as plt, astropy.units as u
 from configparser import RawConfigParser
-import agama
-import jeans_util as util
+import agama, jeans_util as util
 np.random.seed(42)
 
 # print some diagnostic information after each iteration
@@ -30,22 +28,31 @@ def printoutInfo(model, iteration):
     # pot0 = model.potential.potential(0,0,0) - model.potential[0].potential(0,0,0)
 
 
-# True: give the halo a Cuddeford-Osipkov-Merrit velocity anisotropy profile
-osipkov_merrit = False  # abbreviated to OM in filenames
-# True: also run variant with disk stars contaminating halo sample
-disk_contam = True # abbreviated to DC in filenames
-
+if len(sys.argv) == 1:
+    # True: give the halo a Cuddeford-Osipkov-Merrit velocity anisotropy profile
+    osipkov_merrit = False # abbreviated to OM in filenames
+    # True: also run variant with disk stars contaminating halo sample
+    disk_contam = True     # abbreviated to DC in filenames
+elif len(sys.argv) == 2 and ('OM' == sys.argv[1] or 'COM' == sys.argv[1]):
+    osipkov_merrit = True
+    disk_contam = False
+elif len(sys.argv) > 2:
+    exit("Provide 'COM' or no argument to run with or without a Cuddeford-Osipkov-Merrit velocity anisotropy profile")
+else:
+    exit("Could not understand command line argument")
 
 print(f"Running halo-disk-bulge simulation{' with radially varying velocity anisotropy' if osipkov_merrit else ''}")
-if not os.path.exists("../data/halo_disk_bulge/"):
-    os.makedirs("../data/halo_disk_bulge/")
-    print(f"created output directory at ../data/halo_disk_bulge/")
+home_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+write_path = home_path + "/data/halo_disk_bulge/"
+if not os.path.exists(write_path):
+    os.makedirs(write_path)
+    print(f"created output directory at data/halo_disk_bulge/")
 
 # read parameters from the INI file
-iniFileName = "HDB.ini"
+ini_path = home_path + "/equilibrium_models/HDB.ini"
 ini = RawConfigParser()
 #ini.optionxform=str  # do not convert key to lowercase
-ini.read(iniFileName)
+ini.read(ini_path)
 iniPotenHalo  = dict(ini.items("Potential halo"))
 iniPotenBulge = dict(ini.items("Potential bulge"))
 iniPotenDisk  = dict(ini.items("Potential disk"))
@@ -153,7 +160,7 @@ vtheta_sq = convert(vtheta_sq, (HDB_length/HDB_time)**2, (u.km/u.s)**2)
 vphi_sq   = convert(vphi_sq,   (HDB_length/HDB_time)**2, (u.km/u.s)**2)
 
 np.savetxt(
-    fname=f"../data/halo_disk_bulge/HDB{'_OM' if osipkov_merrit else ''}_prejeans.csv",
+    fname=f"{write_path}HDB{'_OM' if osipkov_merrit else ''}_prejeans.csv",
     X=np.stack([x, y, z, vx, vy, vz,
                 mass, r, vr_sq, vtheta_sq, vphi_sq], axis=1),
     delimiter=',', header=" x, y, z [kpc], vx, vy, vz [km/s], mass [Msun], gc_radius, vr_sq, vtheta_sq, vphi_sq [km2/s2]"
@@ -175,7 +182,7 @@ r_mix = r_mix[sorter]; m_mix = m_mix[sorter]
 
 # Need this to include all components
 np.savetxt(
-    fname=f"../data/halo_disk_bulge/HDB{'_OM' if osipkov_merrit else ''}_true.csv",
+    fname=f"{write_path}HDB{'_OM' if osipkov_merrit else ''}_true.csv",
     X=np.stack([r_mix[::10], np.cumsum(m_mix)[::10]], axis=1),
     delimiter=',', header=" r [kpc], M(<r)_true [Msun]"
 )
@@ -218,7 +225,7 @@ if disk_contam:
     r_mix = r_mix[sorter]; m_mix = m_mix[sorter]
 
     np.savetxt(
-        fname=f"../data/halo_disk_bulge/HDB{'_OM' if osipkov_merrit else ''}_DC_prejeans.csv",
+        fname=f"{write_path}HDB{'_OM' if osipkov_merrit else ''}_DC_prejeans.csv",
         X=np.stack([x_mix, y_mix, z_mix, vx_mix, vy_mix, vz_mix,
                     m_mix, r_mix, vr_sq_mix, vtheta_sq_mix, vphi_sq_mix], axis=1),
         delimiter=',', header=" x, y, z [kpc], vx, vy, vz [km/s], mass [Msun], gc_radius, vr_sq, vtheta_sq, vphi_sq [km2/s2]"
