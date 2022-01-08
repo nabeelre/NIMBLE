@@ -57,6 +57,7 @@ if fig_to_make == 'halo_alone':
     labels = [rf"$q={qs[0]}{marker[0]}$", rf"$q={qs[1]}{marker[1]}$", rf"$q={qs[2]}{marker[2]}$"]
 
     for i in range(len(qs)):
+        #                                                                   Change here if using custom knot configurations
         read(i, f"{home_path}/results/halo_alone_{qs[i]}/halo_alone_{qs[i]}_1-70-6.csv",
                 f"{home_path}/data/halo_alone/halo_alone_{qs[i]}_true.csv")
 elif fig_to_make == 'halo_disk_bulge':
@@ -70,6 +71,7 @@ elif fig_to_make == 'halo_disk_bulge':
 
     for i in range(N):
         # Note that HBD and HDB_DC share the same _true.csv file
+        #                                                   Change here if using custom knot configurations
         read(i, f"{home_path}/results/{names[i]}/{names[i]}_5-80-6.csv",
                 f"{home_path}/data/halo_disk_bulge/{'HDB' if names[i]=='HDB_DC' else names[i]}_true.csv")
 elif fig_to_make == 'latte':
@@ -82,6 +84,7 @@ elif fig_to_make == 'latte':
     labels = [gal + mark for (gal, mark) in zip(gals, marker)]
 
     for i in range(N):
+        #                                                 Change here if using custom knot configurations
         read(i, f"{home_path}/results/{gals[i]}/{gals[i]}_5-80-5.csv",
                 f"{home_path}/data/{gals[i]}/{gals[i]}_true.csv")
 else:

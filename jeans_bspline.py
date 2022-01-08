@@ -64,6 +64,8 @@ else:
     # Make sure to match expected units or adjust G and the plot labels
     exit()
 
+# If you change these presets to custom knot configurations make sure to update
+# fig3-5.py to read it those results. 
 if "halo_alone" in dataset_name:
     min_rad = 1    # kpc
     max_rad = 70   # kpc
