@@ -11,7 +11,7 @@ See run_latte_errorfree.sh for instructions on downloading the Latte data from
 https://girder.hub.yt/#collection/5b0427b2e9914800018237da/folder/5b211e5a323d120001c7a826
 """
 
-import sys, matplotlib.pyplot as plt, numpy as np, gizmo_read
+import sys, os, matplotlib.pyplot as plt, numpy as np, gizmo_read
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -20,6 +20,11 @@ if __name__ == "__main__":
 
     sim = sys.argv[1]
     assert(sim in ['m12f', 'm12i', 'm12m'])
+
+    if os.path.exists(f"data/{sim}/{sim}_prejeans.csv") and os.path.exists(f"data/{sim}/{sim}_true.csv"):
+        print(f"Prepped Latte {sim} files already exist")
+        print("  Delete the files if you'd like to regenerate them")
+        exit()
 
     # Preparing _prejeans.csv file
     part = gizmo_read.read.Read.read_snapshot(species=['star'], directory=f'data/{sim}',
