@@ -23,7 +23,7 @@ if __name__ == "__main__":
 
     if os.path.exists(f"data/{sim}/{sim}_prejeans.csv") and os.path.exists(f"data/{sim}/{sim}_true.csv"):
         print(f"Prepped Latte {sim} files already exist")
-        print("  Delete the files if you'd like to regenerate them")
+        print("  Delete the files if you'd like to regenerate them\n")
         exit()
 
     # Preparing _prejeans.csv file

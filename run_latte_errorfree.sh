@@ -4,7 +4,7 @@
 # The resulting figure is stored in figures/ and with default settings matches that
 # presented in Rehemtulla+2022.
 
-./download_latte
+./download_latte.sh
 
 # Latte galaxies to model
 # if you change these makes the corresponding changes in the latte branch of fig3-5.py

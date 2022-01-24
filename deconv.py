@@ -278,7 +278,7 @@ if __name__ == "__main__":
         assert(lattesim in ['m12f', 'm12i', 'm12m'])
         assert(lsr in ['LSR0', 'LSR1', 'LSR2'])
 
-        print(f"RUNNING LATTE {lattesim} {lsr} {gaia_release}{' with 1/10 subsample' if SUBSAMPLE else ''}")
+        print(f"\033[1;33m**** RUNNING LATTE {lattesim} {lsr} {gaia_release}{' with 1/10 subsample' if SUBSAMPLE else ''} ****\033[0m")
     else:
         print("Too few or too many command line arguments")
         exit()
@@ -623,7 +623,7 @@ if __name__ == "__main__":
     # first find the best-fit model by deterministic optimization algorithm,
     # restarting it several times until it seems to arrive at the global minimum
     while True:
-        if VERBOSE: print('Starting deterministic search')
+        if VERBOSE: print('\033[1;37mStarting deterministic search\033[0m')
         # minimization algorithm - so provide a negative likelihood to it
         params = scipy.optimize.minimize(lambda x: -likelihood(x), params, method='Nelder-Mead',
             options=dict(maxfev=500)).x
@@ -659,7 +659,7 @@ if __name__ == "__main__":
     with Pool() as pool:
         # numthreads = nwalkers//2   # parallel threads in emcee - make sure you don't clog up your machine!
         sampler  = emcee.EnsembleSampler(nwalkers, len(params), likelihood, pool=pool)
-        if VERBOSE: print('Starting MCMC search')
+        if VERBOSE: print('\033[1;37mStarting MCMC search\033[0m')
         converged = False
         iter = 0
         while not converged:  # run several passes until log-likelihood stabilizes (convergence is reached)
@@ -677,7 +677,7 @@ if __name__ == "__main__":
             prevmaxloglike = maxloglike
             prevavgloglike = avgloglike
             if converged:
-                if VERBOSE: print('Converged');
+                if VERBOSE: print('\033[1;37mConverged#%d\033[0m');
                 plotprofiles(chain[::20], "converged")
 
             # produce diagnostic plots after each MCMC episode:
