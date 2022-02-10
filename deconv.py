@@ -272,9 +272,9 @@ if __name__ == "__main__":
     if len(sys.argv) == 4:
         lattesim = sys.argv[1].lower()
         lsr = sys.argv[2].upper()
-        gaia_release = sys.argv[3].lower()
+        gaia_release = sys.argv[3].upper()
 
-        assert(gaia_release in ['dr3', 'dr4', 'dr5'])
+        assert(gaia_release in ['DR3', 'DR4', 'DR5'])
         assert(lattesim in ['m12f', 'm12i', 'm12m'])
         assert(lsr in ['LSR0', 'LSR1', 'LSR2'])
 
@@ -677,7 +677,7 @@ if __name__ == "__main__":
             prevmaxloglike = maxloglike
             prevavgloglike = avgloglike
             if converged:
-                if VERBOSE: print('\033[1;37mConverged#%d\033[0m');
+                if VERBOSE: print('\033[1;37mConverged\033[0m');
                 plotprofiles(chain[::20], "converged")
 
             # produce diagnostic plots after each MCMC episode:
@@ -772,7 +772,12 @@ if __name__ == "__main__":
     fig = plt.figure(figsize=(15,10))
     gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
     axs = gs.subplots(sharex=True)
-    colors = {'m12f': '#4a0078', 'm12i': '#157F1F', 'm12m': '#931621', None: 'red'}
+    colors = {
+        'm12f': '#4a0078',
+        'm12i': '#157F1F',
+        'm12m': '#931621',
+        None: 'red'
+    }
     color = colors[lattesim]
 
     axs[0].plot(r, Menc_med, c=color, linewidth=2.5, label='Jeans estimate')

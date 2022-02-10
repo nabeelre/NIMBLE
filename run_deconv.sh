@@ -7,15 +7,23 @@
 ./download_latte.sh
 
 # The forward modeling routine with deconvolution takes much more time than the
-# inverse modeling routine. It can take upwards of 10 minutes even on fast machines
+# inverse modeling routine. It can take upwards of 10 minutes on a laptop
 # It makes use of multiprocessing, so it will benefit from being run on machines
 # with more CPU cores.
-# I reccomend to install tqdm to monitor progress of the emcee run
+
+# Packages to install:
+# multiprocess (https://pypi.org/project/multiprocess/)
+# emcee (https://emcee.readthedocs.io/en/stable/)
+# scipy (https://scipy.org)
+# pygaia (https://pypi.org/project/PyGaia/)
+# corner (https://corner.readthedocs.io/en/latest/)
+# optionally to monitor progress of the emcee run, tqdm (https://tqdm.github.io)
+pip3 install multiprocess emcee scipy pygaia corner tqdm
 
 # Make sure to make the list of sims and lsrs here match those in fig7.py (sims_to_plot, lsrs_to_plot)
-sims=('m12f') #('m12f' 'm12i' 'm12m')
+sims=('m12f' 'm12i' 'm12m')
 lsrs=('lsr0') #('lsr0' 'lsr1' 'lsr2')
-drs=('dr3') #('dr3' 'dr5')
+drs=('dr3') #('dr3' 'dr4' 'dr5')
 
 for sim in "${sims[@]}"; do
   # prepare the raw latte snapshot for use with the Jeans modeling routine

@@ -33,7 +33,7 @@ all_sims = ['m12f', 'm12i', 'm12m']
 all_lsrs = ['LSR0', 'LSR1', 'LSR2']
 
 sims_to_plot = ['m12f', 'm12i', 'm12m']
-lsrs_to_plot = ['LSR0', 'LSR1', 'LSR2']
+lsrs_to_plot = ['LSR0']
 lsrs_to_plot = [lsr.upper() for lsr in lsrs_to_plot]
 
 datasets_count = len(sims_to_plot)*len(lsrs_to_plot)

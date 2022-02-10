@@ -65,7 +65,7 @@ else:
     exit()
 
 # If you change these presets to custom knot configurations make sure to update
-# fig3-5.py to read it those results. 
+# fig3-5.py to read it those results.
 if "halo_alone" in dataset_name:
     min_rad = 1    # kpc
     max_rad = 70   # kpc
@@ -82,10 +82,10 @@ elif "halo_disk_bulge" in dataset_name:
     num_knots = 6
 elif "m12" in dataset_name:
     min_rad = 1    # kpc
-    max_rad = 100  # kpc
+    max_rad = 200  # kpc
 
     min_knot  = 5  # kpc
-    max_knot  = 80 # kpc
+    max_knot  = 100 # kpc
     num_knots = 5
 else:  # edit B-spline and plotting parameters for custom file here
     min_rad = 1    # kpc
