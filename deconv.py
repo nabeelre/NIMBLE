@@ -190,7 +190,7 @@ if __name__ == "__main__":
         # pmra_err *= 0.001; pmdec_err *= 0.001  # uas/yr -> mas/yr
 
         # pull magnitude of proper motion errors from pygaia
-        PMerr = total_proper_motion_uncertainty(Gapp, release=gaia_release)  # uas/yr
+        PMerr = total_proper_motion_uncertainty(Gapp, release=gaia_release.lower())  # uas/yr
         PMerr *= 0.001  # uas/yr -> mas/yr
 
         # add proper motion errors

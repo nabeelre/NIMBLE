@@ -82,10 +82,10 @@ elif "halo_disk_bulge" in dataset_name:
     num_knots = 6
 elif "m12" in dataset_name:
     min_rad = 1    # kpc
-    max_rad = 200  # kpc
+    max_rad = 100  # kpc
 
     min_knot  = 5  # kpc
-    max_knot  = 100 # kpc
+    max_knot  = 80 # kpc
     num_knots = 5
 else:  # edit B-spline and plotting parameters for custom file here
     min_rad = 1    # kpc
