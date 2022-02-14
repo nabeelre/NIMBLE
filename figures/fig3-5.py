@@ -43,8 +43,7 @@ else:
 
 
 fig = plt.figure(figsize=(15,10), dpi=250)
-gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
-axs = gs.subplots(sharex=True)
+axs = fig.subplots(nrows=2, ncols=1, sharex=True, gridspec_kw=dict(hspace=0, height_ratios=[3,1]))
 marker = ['', '*', '*']
 
 if fig_to_make == 'halo_alone':
@@ -96,7 +95,7 @@ for i in range(N):
     axs[0].plot(r_trues[i], (M_trues[i]+vert_shift[i])/1e12, c=colors[i], linewidth=2.5, linestyle='dashed')
     axs[1].plot(r_jeans[i], 100*fractional_err(r_jeans[i], r_trues[i], M_jeans[i], M_trues[i]), c=colors[i], linewidth=4.0)
 
-    axs[0].text(x=label_pos[i][0], y=label_pos[i][1], s=labels[i], fontsize=24, c=colors[i])
+    axs[0].text(x=label_pos[i][0], y=label_pos[i][1], s=labels[i], fontsize=24, color=colors[i])
 
 axs[0].text(x=label_pos[3][0], y=label_pos[3][1], s="*vertically shifted for clarity", fontsize=24)
 

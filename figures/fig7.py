@@ -43,10 +43,10 @@ if datasets_count == 0:
 
 gaia_release = ""
 if len(sys.argv) == 1:
-    gaia_release = 'dr3'
+    gaia_release = 'DR3'
 elif len(sys.argv) == 2:
-    gaia_release = sys.argv[1].lower()
-    assert(gaia_release in ['dr3', 'dr4', 'dr5'])
+    gaia_release = sys.argv[1].upper()
+    assert(gaia_release in ['DR3', 'DR4', 'DR5'])
 else:
     print("Could not understand command line arguments")
     exit()
@@ -78,11 +78,10 @@ for sim_idx, sim in enumerate(all_sims):
             percerr_upps[iter] = 100*fractional_err(rs[iter], r_trues[sim_idx], Menc_upps[iter], M_trues[sim_idx])
 
 # For displaying label in plot
-if gaia_release == 'dr3': gaia_release = '(E)DR3'
+if gaia_release == 'DR3': gaia_release = '(E)DR3'
 
 fig = plt.figure(figsize=(15,20))
-gs = fig.add_gridspec(4, hspace=0, height_ratios=[3,1,1,1])
-axs = gs.subplots(sharex=True)
+axs = fig.subplots(nrows=4, ncols=1, sharex=True, gridspec_kw=dict(hspace=0, height_ratios=[3,1,1,1]))
 marker = ['*', '*', '']
 vert_shift = [0.6e12, 0.45e12, 0]
 colors = ['#4a0078', '#bf6c06', '#097575']
@@ -111,13 +110,13 @@ axs[0].fill_between([], [], [], color='lightgray', label=r"$\pm1\sigma$")
 # Labels on jeans estimate lines
 axs[0].text(x=62, y=0.1, s="*vertically shifted for clarity", fontsize=24)
 if "m12f" in sims_to_plot:
-    axs[0].text(x=4.5, y=0.72, s="m12f*", rotation=30, fontsize=24, c=colors[0], zorder=15)
+    axs[0].text(x=4.5, y=0.72, s="m12f*", rotation=30, fontsize=24, color=colors[0], zorder=15)
 if "m12i" in sims_to_plot:
-    axs[0].text(x=10, y=0.60, s="m12i*", rotation=25, fontsize=24, c=colors[1], zorder=15)
+    axs[0].text(x=10, y=0.60, s="m12i*", rotation=25, fontsize=24, color=colors[1], zorder=15)
 if "m12m" in sims_to_plot:
-    axs[0].text(x=11, y=0.13, s="m12m", rotation=31, fontsize=24, c=colors[2], zorder=15)
+    axs[0].text(x=11, y=0.13, s="m12m", rotation=31, fontsize=24, color=colors[2], zorder=15)
 
-axs[0].text(x=53 if gaia_release=='(E)DR3' else 57, y=1.49, s=f"Deconvolution with {gaia_release.upper()} Errors", rotation=0, fontsize=24, c='k')
+axs[0].text(x=53 if gaia_release=='(E)DR3' else 57, y=1.49, s=f"Deconvolution with {gaia_release.upper()} Errors", rotation=0, fontsize=24, color='k')
 axs[0].legend(loc='upper left', fontsize=22, frameon=False)
 
 axs[0].set_ylabel(r"$M(< r)$ [$10^{12}$ $M_{\odot}$]", size=30, labelpad=15)
@@ -140,11 +139,11 @@ axs[1].legend(loc='upper right', fontsize=22, frameon=False)
 
 # Labeling for each error panel
 if "m12f" in sims_to_plot:
-    axs[1].text(x=2, y=22, s="m12f", fontsize=24, c=colors[0])
+    axs[1].text(x=2, y=22, s="m12f", fontsize=24, color=colors[0])
 if "m12i" in sims_to_plot:
-    axs[2].text(x=2, y=22, s="m12i", fontsize=24, c=colors[1])
+    axs[2].text(x=2, y=22, s="m12i", fontsize=24, color=colors[1])
 if "m12m" in sims_to_plot:
-    axs[3].text(x=2, y=22, s="m12m", fontsize=24, c=colors[2])
+    axs[3].text(x=2, y=22, s="m12m", fontsize=24, color=colors[2])
 
 axs[2].set_ylabel('% Error', size=34)
 

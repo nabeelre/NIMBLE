@@ -192,7 +192,7 @@ dlnrho_dlnr = dlnrho_dlnr_eval(S, r)
 
 if VERBOSE:
     fig, ax = plt.subplots(figsize=(12.5,8))
-    plt.loglog(r, rho, base=np.e)
+    plt.loglog(r, rho) #, base=np.e)
     ax.set_title(r"log Density profile - log($\rho$) vs log($r$)", fontsize=16)
     ax.set_xlabel("radius [kpc]", fontsize=16)
     ax.set_ylabel(r"$\rho$ [kpc$^{-3}$]", fontsize=16)
@@ -210,8 +210,7 @@ M_jeans = (vr_fit * r / G) * (a + b + c)
 if VERBOSE:
     if TRUE_PROVIDED:
         fig = plt.figure(figsize=(12,8))
-        gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
-        axs = gs.subplots(sharex=True)
+        axs = fig.subplots(nrows=2, ncols=1, sharex=True, gridspec_kw=dict(hspace=0, height_ratios=[3,1]))
 
         axs[0].plot(r, M_jeans, c='navy', linewidth=2.0, label='Jeans Estimated Mass')
         axs[0].plot(true_r, true_M, c='gold', linestyle='dashed', label='True Cumulative Mass')

@@ -18,7 +18,7 @@
 # pygaia (https://pypi.org/project/PyGaia/)
 # corner (https://corner.readthedocs.io/en/latest/)
 # optionally to monitor progress of the emcee run, tqdm (https://tqdm.github.io)
-pip3 install multiprocess emcee scipy pygaia corner tqdm
+pip3 install --user multiprocess emcee scipy pygaia corner tqdm
 
 # Make sure to make the list of sims and lsrs here match those in fig7.py (sims_to_plot, lsrs_to_plot)
 sims=('m12f' 'm12i' 'm12m')

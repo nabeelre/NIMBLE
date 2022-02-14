@@ -370,12 +370,12 @@ if __name__ == "__main__":
         # first compute the integral over the selection region in the northern Galactic hemisphere
         norm = agama.integrateNdim(integrand,
             lower=[0, numpy.sin(max(bmin*d2r, blow)), Gmin-4*DMerr],
-            upper=[1, numpy.sin(bupp),                Gmax+4*DMerr], toler=1e-5)[0]
+            upper=[1, numpy.sin(bupp),                Gmax+4*DMerr], toler=1e-6)[0]
         # then add the contribution from the region in the southern Galactic hemisphere
         if blow <= -bmin*d2r:
             norm += agama.integrateNdim(integrand,
             lower=[0, numpy.sin(blow),      Gmin-4*DMerr],
-            upper=[1, numpy.sin(-bmin*d2r), Gmax+4*DMerr], toler=1e-5)[0]
+            upper=[1, numpy.sin(-bmin*d2r), Gmax+4*DMerr], toler=1e-6)[0]
 
         # now renormalize the density profile to have unit integral over the selection volume
         logrho = agama.CubicSpline(dens_knots, knots_logdens - numpy.log(norm), reg=True)
@@ -429,8 +429,7 @@ if __name__ == "__main__":
     def plotprofiles(chain, plotname=''):
         # Density plots
         fig = plt.figure(figsize=(7,7))
-        gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
-        axs = gs.subplots(sharex=True)
+        axs = fig.subplots(nrows=2, ncols=1, sharex=True, gridspec_kw=dict(hspace=0, height_ratios=[3, 1]))
 
         r  = numpy.logspace(0, 2, 200)
         lr = numpy.log(r)
@@ -483,8 +482,7 @@ if __name__ == "__main__":
 
             # Sigma plots
             fig = plt.figure(figsize=(12,7))
-            gs = fig.add_gridspec(2,2, hspace=0, wspace=0, height_ratios=[3, 1], width_ratios=[1,1])
-            axs = gs.subplots(sharex=True)
+            axs = fig.subplots(nrows=2, ncols=2, sharex=True, gridspec_kw=dict(hspace=0, wspace=0, height_ratios=[3, 1], width_ratios=[1,1]))
             axs[0,0].text(x=45, y=470, s='Radial', size=18)
             axs[0,1].text(x=45, y=470, s='Tangential', size=18)
 
@@ -770,8 +768,7 @@ if __name__ == "__main__":
     plt.rcParams.update({'font.size': 18})
     plt.rcParams['agg.path.chunksize'] = 10000  # overflow error on line 835 without this
     fig = plt.figure(figsize=(15,10))
-    gs = fig.add_gridspec(2, hspace=0, height_ratios=[3, 1])
-    axs = gs.subplots(sharex=True)
+    axs = fig.subplots(nrows=2, ncols=1, sharex=True, gridspec_kw=dict(hspace=0, height_ratios=[3, 1]))
     colors = {
         'm12f': '#4a0078',
         'm12i': '#157F1F',

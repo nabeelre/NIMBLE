@@ -99,7 +99,7 @@ model.components[1] = agama.Component(df=dfBulge, disklike=False, **iniSCMBulge)
 model.components[2] = agama.Component(df=dfHalo,  disklike=False, **iniSCMHalo)
 
 # do a few more iterations to obtain the self-consistent density profile for both disks
-for i in range(10):
+for i in range(5):
     print("\033[1;37mStarting iteration #%d\033[0m" % i)
     model.iterate()
     printoutInfo(model, 'iter%d'%i)
