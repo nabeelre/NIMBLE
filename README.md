@@ -1,6 +1,8 @@
 # NIMBLE (**N**on-parametr**I**c jeans **M**odeling with **B**-sp**L**in**E**s)
 
-NIMBLE is a tool for inferring the cumulative mass distribution of a gravitating system from full 6D phase space coordinates of its tracers via spherical Jeans modeling. Spherical Jeans modeling inherently assumes the system is spherically symmetric and in dynamical equilibrium, however, Rehemtulla+2022 show that these conditions are not completely necessary for an accurate mass profile estimate when applied mock Milky Way-like galaxies. Rehemtulla+2022 gives much more detail on the routines included here and extensive tests using them.
+NIMBLE is a tool for inferring the cumulative mass distribution of a gravitating system from full 6D phase space coordinates of its tracers via spherical Jeans modeling. Spherical Jeans modeling inherently assumes the system is spherically symmetric and in dynamical equilibrium, however, Rehemtulla et al. 2022 show that these conditions are not completely necessary for an accurate mass profile estimate when applied mock Milky Way-like galaxies.
+
+Rehemtulla et al. 2022 (https://arxiv.org/abs/2202.05440) gives much more detail on the routines included here and extensive tests using them.
 
 NIMBLE also includes codes for performing related tasks:
 
@@ -66,3 +68,7 @@ Again taking m12f LSR1 with DR4 errors as an example
 python3 deconv.py m12f lsr1 dr4
 python3 fig7.py dr4
 ```
+
+#### Requirements
+Matplotlib 3.0.0 or newer
+Python 3.6 or newer
