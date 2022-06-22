@@ -130,7 +130,7 @@ def rotate_coords(sim, lsr, positions, velocities):
 
 
 if __name__ == "__main__":
-    def loadMock(gaiaRele_rse, lattesim, lsr):
+    def loadMock(gaia_release, lattesim, lsr):
         # Load {sim}_prejeans.csv file written by read_latte.ipynb notebook
         # files with '_prejeans.csv' have the following properties:
         # positions in kpc, velocities in km/s, mass in Msun
