@@ -8,6 +8,14 @@ import numpy as np, h5py
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
+Gmax  = 20.7
+Gmin  = 16.0
+Grrl  = 0.58
+DMerr = 0.24
+bmin  = 30.0
+decmin=-35.0
+d2r   = np.pi/180
+
 # adapted from Alex Riley's AuriDESI tutorial and Namitha's how_to_use_mocks.ipynb
 # https://github.com/desimilkyway/tutorials/blob/main/ahriley/auridesi-demo-hawaii.ipynb
 
@@ -148,6 +156,10 @@ def write_true(halonum):
     )
 
     print(f"Finished writing true mass profile of Auriga halo{halonum}")
+
+
+def load():
+    return
 
 
 if __name__ == "__main__":
