@@ -41,7 +41,7 @@ def rotate_y(x_old, y_old, theta):
     return -1*x_old*np.sin(theta) + y_old*np.cos(theta)
 
 
-def loadIRON():
+def load_IRON(SUBSAMPLE, VERBOSE):
     rrls = pd.read_csv("data/gmedinat/DESI-iron_RRLs_v0.2.csv")
 
     ra = rrls['ra'].to_numpy()  # deg
@@ -80,7 +80,7 @@ def loadIRON():
     lsr_info = (8.122, (12.9, 245.6, 7.78), 0.0208)
 
     return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
-            vlos[filt], PMerr[filt], vloserr[filt], lsr_info)
+            vlos[filt], PMerr[filt], vloserr[filt], None, None, lsr_info)
 
 
 def getSurveyFootprintBoundary(decmin):
@@ -139,8 +139,21 @@ def getSurveyFootprintBoundary(decmin):
         return b1, b2, lambda b: curve(b, ext=lp[1]), lp[1]
 
 
+def parse_knots(argv):
+    min_k = int(argv[0])
+    max_k = int(argv[1])
+    num_k = int(argv[2])
+
+    assert(max_k > min_k)
+    assert(num_k > 0)
+
+    print(f"Knots overridden (min, max, num)=({min_k},{max_k},{num_k})")
+    return (min_k, max_k, num_k)
+
+
 def parse_args(argv):
     kind = argv[1]
+    knot_params = (min_knot, max_knot, num_knots)
 
     if kind == "latte":
         lattesim = sys.argv[2].lower()
@@ -158,6 +171,10 @@ def parse_args(argv):
 
         load_params = (lattesim, lsr, gaia_release)
         load_fnc = latte.load
+
+        if len(sys.argv) == 8:
+            knot_params = parse_knots(sys.argv[5:])
+            figs_path += "-".join(map(str, knot_params))+"/"
     elif kind == "auridesi":
         halonum = sys.argv[2].lower()
         lsrdeg = sys.argv[3].upper()
@@ -172,21 +189,31 @@ def parse_args(argv):
 
         load_params = (halonum, lsrdeg)
         load_fnc = auridesi.load
+
+        if len(sys.argv) == 7:
+            knot_params = parse_knots(sys.argv[4:])
+            figs_path += "-".join(map(str, knot_params))+"/"
     elif kind == "iron":
-        load_fnc = loadIRON
-        load_params = None
+        load_fnc = load_IRON
+        load_params = ()
 
         print(f"\033[1;33m**** RUNNING IRON ****\033[0m")
 
         figs_path = "results/iron/"
         true_path = None
+
+        if len(sys.argv) == 5:
+            knot_params = parse_knots(sys.argv[2:])
+            figs_path += "-".join(map(str, knot_params))+"/"
     print("Output to", figs_path)
 
-    return kind, load_fnc, load_params, figs_path, true_path
+    return kind, load_fnc, load_params, knot_params, figs_path, true_path
 
 
 if __name__ == "__main__":
-    kind, load_fnc, load_params, figs_path, true_path = parse_args(sys.argv)
+    kind, load_fnc, load_params, knot_params, figs_path, true_path = parse_args(sys.argv)
+
+    min_knot, max_knot, num_knots = knot_params
 
     l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
         lsr_info = load_fnc(*load_params, SUBSAMPLE, VERBOSE)
@@ -644,8 +671,8 @@ if __name__ == "__main__":
     # columns arranged as [r, Menc] where Menc is the true enclosed mass
     # rows are sorted by increasing radius
     if true_path:
-        r_true, M_true = np.loadtxt(fname=true_path,
-                                    delimiter=',', skiprows=1, unpack=True)
+        r_true, M_true = np.loadtxt(fname=true_path, delimiter=',', 
+                                    skiprows=1, unpack=True)
 
     # Thin the chain
     chain_smpl = chain[::20]
@@ -684,14 +711,19 @@ if __name__ == "__main__":
     plt.rcParams['agg.path.chunksize'] = 10000  # overflow error on line 835 without this
     fig = plt.figure(figsize=(15,10))
     axs = fig.subplots(nrows=2, ncols=1, sharex=True, gridspec_kw=dict(hspace=0, height_ratios=[3, 1]))
-    colors = {
-        'm12f': '#4a0078',
-        'm12i': '#157F1F',
-        'm12m': '#931621',
-        '06': 'k',
-        None: 'red'
-    }
-    color = colors[load_params[0]]
+
+    description = kind+" ".join(load_params)
+
+    if "m12f" in description:
+        color = '#4a0078'
+    elif "m12i" in description:
+        color = '#157F1F'
+    elif "m12m" in description:
+        color = '#931621'
+    elif "06" in description:
+        color = 'g'
+    elif "iron" in description:
+        color = 'mediumblue'
 
     axs[0].plot(r, Menc_med, c=color, linewidth=2.5, label='Jeans estimate')
     axs[0].fill_between(r, Menc_low, Menc_upp, color=color, alpha=0.3, lw=0, label=r'$\pm1\sigma$ interval')
@@ -705,12 +737,12 @@ if __name__ == "__main__":
                             alpha=0.3, lw=0)
 
     axs[0].set_title(figs_path)
-    axs[0].set_ylim([-0.40, 0.40])
+    axs[0].set_ylim([0.9*min(Menc_med), 1.1*Menc_med[-1]])
     axs[1].axhline(0, c='k', linewidth=1)
     axs[1].axhline(0.2, c='k', linewidth=0.5, linestyle='dotted')
     axs[1].axhline(-0.2, c='k', linewidth=0.5, linestyle='dotted')
     axs[1].set_xlim([min(r), max(r)])
-    axs[0].set_ylabel(r"M(<r) ($M_{\odot}$)", size=24)
+    axs[0].set_ylabel(r"$M(<r) (M_{\odot})$", size=24)
     axs[1].set_xlabel('Galactocentric Radius (kpc)', size=24)
     axs[1].set_ylabel('Fractional Error', size=20)
     axs[0].legend()
