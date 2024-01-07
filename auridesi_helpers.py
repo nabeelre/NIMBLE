@@ -38,6 +38,8 @@ def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
         Path to write RRL mocks to
     """
 
+    print(f"Writing mock RRL sample for H{halonum} at {lsrdeg}deg")
+
     if source_path is None:
         source_path = f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mock.fits"
     header = fits.open(source_path)[0].header
@@ -65,7 +67,7 @@ def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
         gaia['PMDEC'], gaia['PMDEC_ERROR'], rvtab['VRAD'], rvtab['VRAD_ERR'], 
         fibermap['GAIA_PHOT_G_MEAN_MAG']
     ])))
-    print("RR Lyrae count:", len(rrls))
+    print("RR Lyrae count:", len(rrls), "\n")
 
     if write_path is None:
         write_path = f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mockRRL.csv"
@@ -158,7 +160,7 @@ if __name__ == "__main__":
     for lsrdeg in lsrdegs:
         for halonum in halonums:
             source_path = nersc_path+f"/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mock.fits"
-            write_mockRRL("16", "030", source_path)
+            write_mockRRL(lsrdeg, halonum, source_path)
 
     # for halonum in halonums:
     #     write_true(halonum)
