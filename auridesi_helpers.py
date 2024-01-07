@@ -5,9 +5,6 @@ import astropy.units as u
 
 import numpy as np, h5py
 
-import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
-
 Gmax  = 20.7
 Gmin  = 16.0
 Grrl  = 0.58
@@ -18,13 +15,10 @@ d2r   = np.pi/180
 
 # adapted from Alex Riley's AuriDESI tutorial and Namitha's how_to_use_mocks.ipynb
 # https://github.com/desimilkyway/tutorials/blob/main/ahriley/auridesi-demo-hawaii.ipynb
-
-plt.rcParams.update({
-    "text.usetex": True
-})
+nersc_path = "/global/cfs/cdirs/desi/users/namitha/Aurigaia/AuriDESI_Mocks_Spectroscopic_Catalog"
 
 
-def write_mockRRL(halonum, lsrdeg):
+def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
     """
     Read AuriDESI fits files and output csv of mock RRL stars ready for input
     into deconv.py
@@ -36,51 +30,46 @@ def write_mockRRL(halonum, lsrdeg):
 
     lsrdeg: str
         LSR position for AuriDESI mock ("030", "120", "210", "300")
+
+    source_path: str
+        Path to load AuriDESI mocks from
+
+    write_path: str
+        Path to write RRL mocks to
     """
 
-    fname = f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mock.fits"
-    header = fits.open(fname)[0].header
+    if source_path is None:
+        source_path = f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mock.fits"
+    header = fits.open(source_path)[0].header
 
-    rvtab =    Table.read(fname, hdu='rvtab')
-    fibermap = Table.read(fname, hdu='fibermap')
-    gaia =     Table.read(fname, hdu='gaia')
-    true =     Table.read(fname, hdu='true_values')
-    # prog =     Table.read(fname, hdu='progenitors')
+    rvtab =    Table.read(source_path, hdu='rvtab')
+    fibermap = Table.read(source_path, hdu='fibermap')
+    gaia =     Table.read(source_path, hdu='gaia')
+    true =     Table.read(source_path, hdu='true_values')
+    # prog =     Table.read(source_path, hdu='progenitors')
 
     print("Initial particle count:", len(rvtab))
 
     dist = coord.Distance(parallax=true['PARALLAX']*u.mas)
     true['GMAG'] = true['APP_GMAG'] - dist.distmod.value
 
-    Thigh = 8500
-    Tlow = 5500
-
-    MGhigh = 0.68
-    MGlow = 0.48
-
-    logghigh = 3.5
-    logglow = 1.5
-
-    box1 = [[Thigh,logghigh], [Thigh,logglow], [Tlow,logglow], [Tlow,logghigh]]
-    box2 = [[Thigh,MGlow], [Thigh,MGhigh], [Tlow,MGhigh], [Tlow,MGlow]]
-
-    p1 = Polygon(box1, facecolor='None', edgecolor='r')
-    p2 = Polygon(box2, facecolor='None', edgecolor='r')
-
-    in_box1 = p1.get_path().contains_points(true[['TEFF', 'LOGG']].to_pandas().to_numpy())
-    in_box2 = p2.get_path().contains_points(true[['TEFF', 'GMAG']].to_pandas().to_numpy())
+    select_RRL = (true['AGE'] > 10) & (true['MASS'] > 0.7) & (true['MASS'] < 0.9) & \
+                 (true['FEH'] < -0.5) & (true['TEFF'] > 6000) & (true['TEFF'] < 7000) & \
+                 (true['GMAG'] > 0.45) & (true['GMAG'] < 0.65)
 
     def is_RRL(arr):
-        return arr[in_box1 * in_box2]
-        
-    rrls = Table(list(map(is_RRL, [gaia['RA'], gaia['DEC'], gaia['PMRA'], gaia['PMRA_ERROR'], gaia['PMDEC'], gaia['PMDEC_ERROR'], 
-                                   rvtab['VRAD'], rvtab['VRAD_ERR'], 
-                                   fibermap['GAIA_PHOT_G_MEAN_MAG']])))
+        return arr[select_RRL]
     
+    rrls = Table(list(map(is_RRL, [
+        gaia['RA'], gaia['DEC'], gaia['PMRA'], gaia['PMRA_ERROR'], 
+        gaia['PMDEC'], gaia['PMDEC_ERROR'], rvtab['VRAD'], rvtab['VRAD_ERR'], 
+        fibermap['GAIA_PHOT_G_MEAN_MAG']
+    ])))
     print("RR Lyrae count:", len(rrls))
 
-    rrls.write(f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mockRRL.csv", 
-               delimiter=',', format='ascii', overwrite=True)
+    if write_path is None:
+        write_path = f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mockRRL.csv"
+    rrls.write(write_path, delimiter=',', format='ascii', overwrite=True)
     
 
 def write_true(halonum):
@@ -166,7 +155,10 @@ if __name__ == "__main__":
     halonums = ["06", "16", "21", "23", "24", "27"]
     lsrdegs = ["030", "120", "210", "300"]
 
-    # write_mockRRL("16", "030")
+    for lsrdeg in lsrdegs:
+        for halonum in halonums:
+            source_path = nersc_path+f"/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mock.fits"
+            write_mockRRL("16", "030", source_path)
 
-    for halonum in halonums:
-        write_true(halonum)
+    # for halonum in halonums:
+    #     write_true(halonum)
