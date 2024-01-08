@@ -3,7 +3,8 @@ from astropy.io import fits
 import astropy.coordinates as coord
 import astropy.units as u
 
-import numpy as np, h5py
+import numpy as np, pandas as pd, h5py, agama
+import matplotlib.pyplot as plt
 
 Gmax  = 20.7
 Gmin  = 16.0
@@ -62,11 +63,18 @@ def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
     def is_RRL(arr):
         return arr[select_RRL]
     
-    rrls = Table(list(map(is_RRL, [
-        gaia['RA'], gaia['DEC'], gaia['PMRA'], gaia['PMRA_ERROR'], 
-        gaia['PMDEC'], gaia['PMDEC_ERROR'], rvtab['VRAD'], rvtab['VRAD_ERR'], 
-        fibermap['GAIA_PHOT_G_MEAN_MAG']
-    ])))
+    rrls = Table(
+        list(map(is_RRL, [gaia['RA'], gaia['DEC'], gaia['PMRA'], 
+                          gaia['PMRA_ERROR'], gaia['PMDEC'], gaia['PMDEC_ERROR'],
+                          rvtab['VRAD'], rvtab['VRAD_ERR'], 
+                          fibermap['GAIA_PHOT_G_MEAN_MAG'], true['RA'], 
+                          true['DEC'], true['PMRA'], true['PMDEC'], 
+                          true['PARALLAX'], true['VRAD']])), 
+        names=['RA', 'DEC', 'PMRA', 'PMRA_ERROR', 'PMDEC', 'PMDEC_ERROR', 
+               'VRAD', 'VRAD_ERR', 'GAIA_PHOT_G_MEAN_MAG', 'TRUE_RA', 
+               'TRUE_DEC', 'TRUE_PMRA', 'TRUE_PMDEC', 'TRUE_PARALLAX', 
+               'TRUE_VRAD']
+    )
     print("RR Lyrae count:", len(rrls), "\n")
 
     if write_path is None:
@@ -83,7 +91,7 @@ def write_true(halonum):
     halonum: str
         Auriga halo number of mock to write ("06", "16", "21", "23", "24", "27")
     """
-    filename = f"data/AuriDESI_Spec/auriga_halos/snapshot_reduced_temprho_halo_{halonum}_063.hdf5"
+    filename = f"data/auriga/H{halonum}/snapshot_reduced_temprho_halo_{halonum}_063.hdf5"
     f = h5py.File(filename, 'r')
 
     # (Z, Y, X) converted from Mpc to kpc
@@ -141,16 +149,125 @@ def write_true(halonum):
     M_cumul = M_cumul_star_wind + M_cumul_gas + M_cumul_dm + M_cumul_bh
 
     np.savetxt(
-        fname=f"data/AuriDESI_Spec/auriga_halos/Au{halonum}_true.csv",
+        fname=f"data/auriga/H{halonum}/Au{halonum}_true.csv",
         X=np.stack([rgrid, M_cumul], axis=1), delimiter=',',
         header="r [kpc], M(<r)_true [Msun]"
     )
 
-    print(f"Finished writing true mass profile of Auriga halo{halonum}")
+    plt.figure()
+    plt.plot(rgrid, M_cumul, label='total')
+    plt.plot(rgrid, M_cumul_star_wind, label='star_wind')
+    plt.plot(rgrid, M_cumul_gas, label='gas')
+    plt.plot(rgrid, M_cumul_dm, label='dm')
+    plt.plot(rgrid, M_cumul_bh, label='bh')
+    plt.legend()
+    plt.xlabel("Galactocentric radius [kpc]")
+    plt.ylabel("Mass enclosed [Msun]")
+    plt.title(f"Auriga H{halonum}")
+    plt.savefig(f"data/auriga/H{halonum}/Au{halonum}_true.pdf", bbox_inches='tight')
+    plt.cla()
+
+    print(f"Finished writing true mass profile of Auriga halo{halonum}\n")
 
 
-def load():
-    return
+def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
+    rrls = pd.read_csv(f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mockRRL.csv")
+
+    ra = rrls['RA'].to_numpy()  # deg
+    dec = rrls['DEC'].to_numpy()  # deg
+    ra  *= d2r  # ra and dec to rad
+    dec *= d2r
+
+    pmra = rrls['PMRA'].to_numpy()  # mas/yr
+    pmdec = rrls['PMDEC'].to_numpy()  # mas/yr
+    pmra_error = rrls['PMRA_ERROR'].to_numpy()  # mas/yr
+    pmdec_error = rrls['PMDEC_ERROR'].to_numpy()  # mas/yr
+
+    # TODO: fix
+    PMerr = (pmra_error + pmdec_error) / 2  # mas/yr
+
+    Gapp = rrls['GAIA_PHOT_G_MEAN_MAG'].to_numpy()  # mag
+    dist = 10**((Grrl - Gapp - 5)/-5)  # apparent magnitude
+
+    vlos = rrls['VRAD'].to_numpy()  # km/s
+    vloserr = rrls['VRAD_ERR'].to_numpy()  # km/s
+
+    l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
+                                                    ra, dec, pmra, pmdec)
+
+    x, y, z = agama.getGalactocentricFromGalactic(l, b, dist)
+    radii = np.sqrt(x**2 + y**2 + z**2)  # kpc
+
+    l /= d2r  # back to degrees
+    b /= d2r
+    dec /= d2r
+
+    filt = (abs(b) >= bmin) * (dec >= decmin) * (Gapp > Gmin) * (Gapp < Gmax)
+
+    solarheight = 2e-05
+    solarradius = -0.008
+    usun = 11.1
+    vlsr = 250.8076194638379
+    vsun = 12.24
+    wsun =  7.25
+    galcen_distance = np.abs(solarradius)*u.Mpc
+#     
+    vsun = vsun + vlsr
+    galcen_v_sun = [usun, vsun, wsun]*u.km/u.s
+    z_sun = solarheight*u.Mpc
+
+    lsr_info = (galcen_distance.to(u.kpc).value, 
+                galcen_v_sun.value, 
+                z_sun.to(u.kpc).value)
+    
+    frame = coord.Galactocentric(*lsr_info)
+
+    pm_ra_cosdec = rrls['TRUE_PMRA']*u.mas/u.yr * np.cos((rrls['TRUE_DEC']*u.deg).to(u.rad))
+    sc = coord.SkyCoord(ra=rrls['TRUE_RA']*u.deg, dec=rrls['TRUE_DEC']*u.deg, 
+                        distance=coord.Distance(parallax=rrls['PARALLAX']*u.mas),
+                        pm_ra_cosdec=pm_ra_cosdec, 
+                        pm_dec=rrls['TRUE_PMDEC']*u.mas/u.yr, 
+                        radial_velocity=rrls['TRUE_VRAD']*u.km/u.s)
+    sc = sc.transform_to(frame)
+
+    true_radii = np.sqrt(sc.x**2 + sc.y**2 + sc.z**2).to(u.kpc)
+    true_rvel, true_tvel, true_pvel = cartesian_to_spherical(sc.x,   sc.y,   sc.z, 
+                                              sc.v_x, sc.v_y, sc.v_z)
+
+    truesig_knots = np.logspace(0, np.log10(60), 10)
+    true_sigmar = agama.splineApprox(np.log(truesig_knots), 
+                                     np.log(true_radii.value), 
+                                     true_rvel**2)
+    true_sigmat = agama.splineApprox(np.log(truesig_knots), 
+                                     np.log(true_radii.value), 
+                                     (true_tvel**2 + true_pvel**2)/2)
+
+    return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
+            vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat, lsr_info)
+
+
+def cartesian_to_spherical(xpos, ypos, zpos, xVel, yVel, zVel):
+    numParticles = len(xpos)
+
+    sinTheta = np.sqrt(xpos**2 + ypos**2) / np.sqrt(xpos**2 + ypos**2 + zpos**2)
+    cosTheta = zpos / np.sqrt(xpos**2 + ypos**2 + zpos**2)
+    sinPhi = ypos / np.sqrt(xpos**2 + ypos**2)
+    cosPhi = xpos / np.sqrt(xpos**2 + ypos**2)
+
+    for i in range(0, numParticles):
+        conversionMatrix = [[sinTheta[i] * cosPhi[i], sinTheta[i] * sinPhi[i],  cosTheta[i]],
+                            [cosTheta[i] * cosPhi[i], cosTheta[i] * sinPhi[i], -sinTheta[i]],
+                            [       -sinPhi[i]      ,        cosPhi[i]       ,        0    ]]
+
+    velMatrix = [ xVel, yVel, zVel ]
+
+    sphereVels = np.matmul(conversionMatrix, velMatrix)
+
+    rVel = sphereVels[0]
+    tVel = sphereVels[1]
+    pVel = sphereVels[2]
+    
+    return rVel, tVel, pVel
 
 
 if __name__ == "__main__":
