@@ -19,6 +19,36 @@ d2r   = np.pi/180
 nersc_path = "/global/cfs/cdirs/desi/users/namitha/Aurigaia/AuriDESI_Mocks_Spectroscopic_Catalog"
 
 
+def get_lsr_frame(halonum):
+    galcen_distance = 8.000*u.kpc
+    z_sun = 2e-2*u.kpc
+
+    usun = 11.1*u.km/u.s
+    vsun = 12.24*u.km/u.s
+    wsun =  7.25*u.km/u.s
+    
+    if halonum == "06":
+        vlsr = 229.2225816451948*u.km/u.s
+    elif halonum == "16":
+        vlsr = 213.5378191707707*u.km/u.s
+    elif halonum == "21":
+        vlsr = 226.5683036672675*u.km/u.s
+    elif halonum == "23":
+        vlsr = 234.6171739867179*u.km/u.s
+    elif halonum == "24":
+        vlsr = 218.7874144767017*u.km/u.s
+    elif halonum == "27":
+        vlsr = 250.8076194638379*u.km/u.s
+    else:
+        print("Could not find halo")
+        exit()
+
+    vsun = vsun + vlsr
+    galcen_v_sun = [usun, vsun, wsun]
+
+    return galcen_distance.value, galcen_v_sun.value, z_sun.to(u.kpc).value
+
+
 def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
     """
     Read AuriDESI fits files and output csv of mock RRL stars ready for input
@@ -204,30 +234,15 @@ def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
 
     filt = (abs(b) >= bmin) * (dec >= decmin) * (Gapp > Gmin) * (Gapp < Gmax)
 
-    solarheight = 2e-05
-    solarradius = -0.008
-    usun = 11.1
-    vlsr = 250.8076194638379
-    vsun = 12.24
-    wsun =  7.25
-    galcen_distance = np.abs(solarradius)*u.Mpc
-#     
-    vsun = vsun + vlsr
-    galcen_v_sun = [usun, vsun, wsun]*u.km/u.s
-    z_sun = solarheight*u.Mpc
-
-    lsr_info = (galcen_distance.to(u.kpc).value, 
-                galcen_v_sun.value, 
-                z_sun.to(u.kpc).value)
-    
+    lsr_info = get_lsr_frame(halonum)
     frame = coord.Galactocentric(*lsr_info)
 
-    pm_ra_cosdec = rrls['TRUE_PMRA']*u.mas/u.yr * np.cos((rrls['TRUE_DEC']*u.deg).to(u.rad))
-    sc = coord.SkyCoord(ra=rrls['TRUE_RA']*u.deg, dec=rrls['TRUE_DEC']*u.deg, 
-                        distance=coord.Distance(parallax=rrls['PARALLAX']*u.mas),
+    pm_ra_cosdec = rrls['TRUE_PMRA'].to_numpy()*u.mas/u.yr * np.cos((rrls['TRUE_DEC'].to_numpy()*u.deg).to(u.rad))
+    sc = coord.SkyCoord(ra=rrls['TRUE_RA'].to_numpy()*u.deg, dec=rrls['TRUE_DEC'].to_numpy()*u.deg, 
+                        distance=coord.Distance(parallax=rrls['TRUE_PARALLAX'].to_numpy()*u.mas),
                         pm_ra_cosdec=pm_ra_cosdec, 
-                        pm_dec=rrls['TRUE_PMDEC']*u.mas/u.yr, 
-                        radial_velocity=rrls['TRUE_VRAD']*u.km/u.s)
+                        pm_dec=rrls['TRUE_PMDEC'].to_numpy()*u.mas/u.yr, 
+                        radial_velocity=rrls['TRUE_VRAD'].to_numpy()*u.km/u.s)
     sc = sc.transform_to(frame)
 
     true_radii = np.sqrt(sc.x**2 + sc.y**2 + sc.z**2).to(u.kpc)
@@ -241,6 +256,8 @@ def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
     true_sigmat = agama.splineApprox(np.log(truesig_knots), 
                                      np.log(true_radii.value), 
                                      (true_tvel**2 + true_pvel**2)/2)
+    
+    print("Number of initial particles:", len(l))
 
     return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
             vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat, lsr_info)
@@ -277,7 +294,7 @@ if __name__ == "__main__":
     for lsrdeg in lsrdegs:
         for halonum in halonums:
             source_path = nersc_path+f"/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mock.fits"
-            write_mockRRL(lsrdeg, halonum, source_path)
+            write_mockRRL(halonum, lsrdeg, source_path)
 
     # for halonum in halonums:
     #     write_true(halonum)

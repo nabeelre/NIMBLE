@@ -185,7 +185,7 @@ def parse_args(argv):
         print(f"\033[1;33m**** RUNNING AURIDESI {halonum} {lsrdeg} ****\033[0m")
 
         figs_path = f"results/auridesi/deconv_{halonum}_{lsrdeg}/"
-        true_path = f"data/AuriDESI_Spec/auriga_halos/snapshot_reduced_temprho_halo_{halonum}_063.hdf5"
+        true_path = f"data/auriga/H{halonum}/Au{halonum}_true.csv"
 
         load_params = (halonum, lsrdeg)
         load_fnc = auridesi.load
