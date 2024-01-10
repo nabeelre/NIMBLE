@@ -33,14 +33,6 @@ def write_csv(data, filename, column_titles):
     )
 
 
-def rotate_x(x_old, y_old, theta):
-    return x_old*np.cos(theta) + y_old*np.sin(theta)
-
-
-def rotate_y(x_old, y_old, theta):
-    return -1*x_old*np.sin(theta) + y_old*np.cos(theta)
-
-
 def load_IRON(SUBSAMPLE, VERBOSE):
     rrls = pd.read_csv("data/gmedinat/DESI-iron_RRLs_v0.2.csv")
 
@@ -147,13 +139,14 @@ def parse_knots(argv):
     assert(max_k > min_k)
     assert(num_k > 0)
 
-    print(f"Knots overridden (min, max, num)=({min_k},{max_k},{num_k})")
+    print(f"Knots overridden (min,max,num)=({min_k},{max_k},{num_k})")
     return (min_k, max_k, num_k)
 
 
 def parse_args(argv):
     kind = argv[1]
-    knot_params = (min_knot, max_knot, num_knots)
+    global min_knot, max_knot, num_knots
+    knot_override = None
 
     if kind == "latte":
         lattesim = sys.argv[2].lower()
@@ -173,11 +166,14 @@ def parse_args(argv):
         load_fnc = latte.load
 
         if len(sys.argv) == 8:
-            knot_params = parse_knots(sys.argv[5:])
-            figs_path += "-".join(map(str, knot_params))+"/"
+            knot_override = parse_knots(sys.argv[5:])
+            figs_path += "-".join(map(str, knot_override))+"/"
     elif kind == "auridesi":
         halonum = sys.argv[2].lower()
         lsrdeg = sys.argv[3].upper()
+        global Gmax, bmin
+        Gmax = 20.0
+        bmin = 20
 
         assert(halonum in ["06", "16", "21", "23", "24", "27"])
         assert(lsrdeg in ["030", "120", "210", "300"])
@@ -191,8 +187,8 @@ def parse_args(argv):
         load_fnc = auridesi.load
 
         if len(sys.argv) == 7:
-            knot_params = parse_knots(sys.argv[4:])
-            figs_path += "-".join(map(str, knot_params))+"/"
+            knot_override = parse_knots(sys.argv[4:])
+            figs_path += "-".join(map(str, knot_override))+"/"
     elif kind == "iron":
         load_fnc = load_IRON
         load_params = ()
@@ -203,17 +199,20 @@ def parse_args(argv):
         true_path = None
 
         if len(sys.argv) == 5:
-            knot_params = parse_knots(sys.argv[2:])
-            figs_path += "-".join(map(str, knot_params))+"/"
-    print("Output to", figs_path)
+            knot_override = parse_knots(sys.argv[2:])
+            figs_path += "-".join(map(str, knot_override))+"/"
 
-    return kind, load_fnc, load_params, knot_params, figs_path, true_path
+    if knot_override is not None:
+        min_knot  = knot_override[0]
+        max_knot  = knot_override[1]
+        num_knots = knot_override[2]
+
+    print("Output to", figs_path)
+    return kind, load_fnc, load_params, figs_path, true_path
 
 
 if __name__ == "__main__":
-    kind, load_fnc, load_params, knot_params, figs_path, true_path = parse_args(sys.argv)
-
-    min_knot, max_knot, num_knots = knot_params
+    kind, load_fnc, load_params, figs_path, true_path = parse_args(sys.argv)
 
     l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
         lsr_info = load_fnc(*load_params, SUBSAMPLE, VERBOSE)
