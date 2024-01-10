@@ -110,7 +110,7 @@ def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
     if write_path is None:
         write_path = f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mockRRL.csv"
     rrls.write(write_path, delimiter=',', format='ascii', overwrite=True)
-    
+
 
 def write_true(halonum):
     """
@@ -209,48 +209,29 @@ def halo_velocity_density_profiles(halonum):
     f = h5py.File(filename, 'r')
 
     # Extract data from Auriga hdf5 file
-    star_wind_coordinates = f['PartType4']['Coordinates']             [:]*1000  # (Z, Y, X) in kpc
-    star_wind_metallicity = f['PartType4']['GFM_Metallicity']         [:]
-    star_wind_form_time   = f['PartType4']['GFM_StellarFormationTime'][:]       # Gyr
-    star_wind_velocities  = f['PartType4']['Velocities']              [:]       # (Vz, Vy, Vx) in km/s
+    dm_coordinates = f['PartType1']['Coordinates'][:]*1000  # (Z, Y, X) in kpc
+    dm_velocities  = f['PartType1']['Velocities'] [:]       # (Vz, Vy, Vx) in km/s
 
-    # Set floor for halo metallicity, some particles have 
-    star_wind_metal_mask = star_wind_metallicity < 1e-7
-    star_wind_metallicity[star_wind_metal_mask] = 1e-7
+    dm_x = dm_coordinates[:,2]
+    dm_y = dm_coordinates[:,1]
+    dm_z = dm_coordinates[:,0]
 
-    log_star_wind_metallicity = np.log10(star_wind_metallicity / 0.0127)
+    dm_vx = dm_velocities[:,2]
+    dm_vy = dm_velocities[:,1]
+    dm_vz = dm_velocities[:,0]
 
-    # Old, low metallicity to select halo - also removes wind particles
-    halo = (log_star_wind_metallicity < -1.5) & (star_wind_form_time > 8)
-
-    halo_star_coordinates = star_wind_coordinates    [halo]
-    halo_star_velocities  = star_wind_velocities     [halo]
-
-    halo_star_x = halo_star_coordinates[:,2]
-    halo_star_y = halo_star_coordinates[:,1]
-    halo_star_z = halo_star_coordinates[:,0]
-
-    halo_star_radii = np.sqrt((halo_star_x ** 2) + 
-                              (halo_star_y ** 2) + 
-                              (halo_star_z ** 2))
-    
-    halo_star_vx = halo_star_velocities[:,2]
-    halo_star_vy = halo_star_velocities[:,1]
-    halo_star_vz = halo_star_velocities[:,0]
-
-    rvel, tvel, pvel = cartesian_to_spherical(halo_star_x, halo_star_y, 
-                                              halo_star_z, halo_star_vx, 
-                                              halo_star_vy, halo_star_vz)
+    dm_radii = np.sqrt((dm_x ** 2) + (dm_y ** 2) + (dm_z ** 2))
+    rvel, tvel, pvel = cartesian_to_spherical(dm_x, dm_y, dm_z, 
+                                              dm_vx, dm_vy, dm_vz)
     
     truesig_knots = np.logspace(0, np.log10(100), 10)
 
     # velocity squared as function of log r
     true_sigmar = agama.splineApprox(np.log(truesig_knots), 
-                                     np.log(halo_star_radii), 
+                                     np.log(dm_radii), 
                                      rvel**2)
-
     true_sigmat = agama.splineApprox(np.log(truesig_knots), 
-                                     np.log(halo_star_radii), 
+                                     np.log(dm_radii), 
                                      (tvel**2 + pvel**2)/2)
     
     return true_sigmar, true_sigmat
