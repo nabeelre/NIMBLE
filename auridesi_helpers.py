@@ -6,11 +6,11 @@ import astropy.units as u
 import numpy as np, pandas as pd, h5py, agama
 import matplotlib.pyplot as plt
 
-Gmax  = 20.7
+Gmax  = 20.0
 Gmin  = 16.0
 Grrl  = 0.58
 DMerr = 0.24
-bmin  = 30.0
+bmin  = 20.0
 decmin=-35.0
 d2r   = np.pi/180
 
@@ -23,28 +23,28 @@ def get_lsr_frame(halonum):
     galcen_distance = 8.000*u.kpc
     z_sun = 2e-2*u.kpc
 
-    usun = 11.1*u.km/u.s
-    vsun = 12.24*u.km/u.s
-    wsun =  7.25*u.km/u.s
+    usun = 11.1
+    vsun = 12.24
+    wsun =  7.25
     
     if halonum == "06":
-        vlsr = 229.2225816451948*u.km/u.s
+        vlsr = 229.2225816451948
     elif halonum == "16":
-        vlsr = 213.5378191707707*u.km/u.s
+        vlsr = 213.5378191707707
     elif halonum == "21":
-        vlsr = 226.5683036672675*u.km/u.s
+        vlsr = 226.5683036672675
     elif halonum == "23":
-        vlsr = 234.6171739867179*u.km/u.s
+        vlsr = 234.6171739867179
     elif halonum == "24":
-        vlsr = 218.7874144767017*u.km/u.s
+        vlsr = 218.7874144767017
     elif halonum == "27":
-        vlsr = 250.8076194638379*u.km/u.s
+        vlsr = 250.8076194638379
     else:
         print("Could not find halo")
         exit()
 
     vsun = vsun + vlsr
-    galcen_v_sun = [usun, vsun, wsun]
+    galcen_v_sun = [usun, vsun, wsun]*u.km/u.s
 
     return galcen_distance.value, galcen_v_sun.value, z_sun.to(u.kpc).value
 
@@ -120,6 +120,9 @@ def write_true(halonum):
     ----------
     halonum: str
         Auriga halo number of mock to write ("06", "16", "21", "23", "24", "27")
+    
+    Auriga halos downloaded from:
+    https://wwwmpa.mpa-garching.mpg.de/auriga/data.html
     """
     filename = f"data/auriga/H{halonum}/snapshot_reduced_temprho_halo_{halonum}_063.hdf5"
     f = h5py.File(filename, 'r')
@@ -200,8 +203,64 @@ def write_true(halonum):
     print(f"Finished writing true mass profile of Auriga halo{halonum}\n")
 
 
+def halo_velocity_density_profiles(halonum):
+    filename = f"data/auriga/H{halonum}/snapshot_reduced_temprho_halo_{halonum}_063.hdf5"
+
+    f = h5py.File(filename, 'r')
+
+    # Extract data from Auriga hdf5 file
+    star_wind_coordinates = f['PartType4']['Coordinates']             [:]*1000  # (Z, Y, X) in kpc
+    star_wind_metallicity = f['PartType4']['GFM_Metallicity']         [:]
+    star_wind_form_time   = f['PartType4']['GFM_StellarFormationTime'][:]       # Gyr
+    star_wind_velocities  = f['PartType4']['Velocities']              [:]       # (Vz, Vy, Vx) in km/s
+
+    # Set floor for halo metallicity, some particles have 
+    star_wind_metal_mask = star_wind_metallicity < 1e-7
+    star_wind_metallicity[star_wind_metal_mask] = 1e-7
+
+    log_star_wind_metallicity = np.log10(star_wind_metallicity / 0.0127)
+
+    # Old, low metallicity to select halo - also removes wind particles
+    halo = (log_star_wind_metallicity < -1.5) & (star_wind_form_time > 8)
+
+    halo_star_coordinates = star_wind_coordinates    [halo]
+    halo_star_velocities  = star_wind_velocities     [halo]
+
+    halo_star_x = halo_star_coordinates[:,2]
+    halo_star_y = halo_star_coordinates[:,1]
+    halo_star_z = halo_star_coordinates[:,0]
+
+    halo_star_radii = np.sqrt((halo_star_x ** 2) + 
+                              (halo_star_y ** 2) + 
+                              (halo_star_z ** 2))
+    
+    halo_star_vx = halo_star_velocities[:,2]
+    halo_star_vy = halo_star_velocities[:,1]
+    halo_star_vz = halo_star_velocities[:,0]
+
+    rvel, tvel, pvel = cartesian_to_spherical(halo_star_x, halo_star_y, 
+                                              halo_star_z, halo_star_vx, 
+                                              halo_star_vy, halo_star_vz)
+    
+    truesig_knots = np.logspace(0, np.log10(100), 10)
+
+    # velocity squared as function of log r
+    true_sigmar = agama.splineApprox(np.log(truesig_knots), 
+                                     np.log(halo_star_radii), 
+                                     rvel**2)
+
+    true_sigmat = agama.splineApprox(np.log(truesig_knots), 
+                                     np.log(halo_star_radii), 
+                                     (tvel**2 + pvel**2)/2)
+    
+    return true_sigmar, true_sigmat
+
+
 def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
     rrls = pd.read_csv(f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mockRRL.csv")
+    print("Number of initial particles:", len(rrls))
+
+    lsr_info = get_lsr_frame(halonum)
 
     ra = rrls['RA'].to_numpy()  # deg
     dec = rrls['DEC'].to_numpy()  # deg
@@ -217,47 +276,24 @@ def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
     PMerr = (pmra_error + pmdec_error) / 2  # mas/yr
 
     Gapp = rrls['GAIA_PHOT_G_MEAN_MAG'].to_numpy()  # mag
-    dist = 10**((Grrl - Gapp - 5)/-5)  # apparent magnitude
+    dist = 10**((Grrl - Gapp - 5)/-5)  # pc
 
     vlos = rrls['VRAD'].to_numpy()  # km/s
     vloserr = rrls['VRAD_ERR'].to_numpy()  # km/s
 
     l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
                                                     ra, dec, pmra, pmdec)
-
     x, y, z = agama.getGalactocentricFromGalactic(l, b, dist)
     radii = np.sqrt(x**2 + y**2 + z**2)  # kpc
 
-    l /= d2r  # back to degrees
-    b /= d2r
+    # back to degrees
+    l   /= d2r  
+    b   /= d2r
     dec /= d2r
 
     filt = (abs(b) >= bmin) * (dec >= decmin) * (Gapp > Gmin) * (Gapp < Gmax)
 
-    lsr_info = get_lsr_frame(halonum)
-    frame = coord.Galactocentric(*lsr_info)
-
-    pm_ra_cosdec = rrls['TRUE_PMRA'].to_numpy()*u.mas/u.yr * np.cos((rrls['TRUE_DEC'].to_numpy()*u.deg).to(u.rad))
-    sc = coord.SkyCoord(ra=rrls['TRUE_RA'].to_numpy()*u.deg, dec=rrls['TRUE_DEC'].to_numpy()*u.deg, 
-                        distance=coord.Distance(parallax=rrls['TRUE_PARALLAX'].to_numpy()*u.mas),
-                        pm_ra_cosdec=pm_ra_cosdec, 
-                        pm_dec=rrls['TRUE_PMDEC'].to_numpy()*u.mas/u.yr, 
-                        radial_velocity=rrls['TRUE_VRAD'].to_numpy()*u.km/u.s)
-    sc = sc.transform_to(frame)
-
-    true_radii = np.sqrt(sc.x**2 + sc.y**2 + sc.z**2).to(u.kpc)
-    true_rvel, true_tvel, true_pvel = cartesian_to_spherical(sc.x,   sc.y,   sc.z, 
-                                              sc.v_x, sc.v_y, sc.v_z)
-
-    truesig_knots = np.logspace(0, np.log10(60), 10)
-    true_sigmar = agama.splineApprox(np.log(truesig_knots), 
-                                     np.log(true_radii.value), 
-                                     true_rvel**2)
-    true_sigmat = agama.splineApprox(np.log(truesig_knots), 
-                                     np.log(true_radii.value), 
-                                     (true_tvel**2 + true_pvel**2)/2)
-    
-    print("Number of initial particles:", len(l))
+    true_sigmar, true_sigmat = halo_velocity_density_profiles(halonum)
 
     return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
             vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat, lsr_info)
