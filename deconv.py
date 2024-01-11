@@ -54,14 +54,11 @@ def load_IRON(SUBSAMPLE, VERBOSE):
     vlos = rrls['v0_mean'].to_numpy()  # km/s
     vloserr = rrls['v0_std'].to_numpy()  # km/s
 
-    dist = rrls['dist_from_feh_k_mean'].to_numpy()  # kpc
-    disterr = rrls['dist_from_feh_k_err'].to_numpy()  # kpc TODO fix
+    # dist = rrls['dist_from_feh_k_mean'].to_numpy()  # kpc
+    # disterr = rrls['dist_from_feh_k_err'].to_numpy()  # kpc TODO fix
 
     l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
                                                     ra, dec, pmra, pmdec)
-
-    x, y, z = agama.getGalactocentricFromGalactic(l, b, dist)
-    radii = np.sqrt(x**2 + y**2 + z**2)  # kpc
 
     l /= d2r  # back to degrees
     b /= d2r
@@ -71,7 +68,7 @@ def load_IRON(SUBSAMPLE, VERBOSE):
 
     lsr_info = (8.122, (12.9, 245.6, 7.78), 0.0208)
 
-    return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
+    return (l[filt], b[filt], None, Gapp[filt], pml[filt], pmb[filt],
             vlos[filt], PMerr[filt], vloserr[filt], None, None, lsr_info)
 
 
@@ -214,7 +211,7 @@ def parse_args(argv):
 if __name__ == "__main__":
     kind, load_fnc, load_params, figs_path, true_path = parse_args(sys.argv)
 
-    l, b, radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
+    l, b, true_dens_radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
         lsr_info = load_fnc(*load_params, SUBSAMPLE, VERBOSE)
 
     if VERBOSE: print('Number of particles in survey volume:', len(l))
@@ -367,7 +364,7 @@ if __name__ == "__main__":
         lrhist = np.log(rhist)
         if true_path is not None:
             knots_logr_true = np.linspace(np.log(1), np.log(200), 12)
-            S = agama.splineLogDensity(knots_logr_true, x=np.log(radii), w=np.ones(len(radii)), infLeft=True, infRight=True)
+            S = agama.splineLogDensity(knots_logr_true, x=np.log(true_dens_radii), w=np.ones(len(true_dens_radii)), infLeft=True, infRight=True)
             trueparams_dens = np.log((np.exp(S(knots_logr_true))) / (4.0 * np.pi * (np.exp(knots_logr_true)**3)))
             trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]  # set the first element of array to zero and exclude it
             truedens = np.exp(modelDensity(trueparams_dens, truedens=True)(lr))

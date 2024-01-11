@@ -234,7 +234,7 @@ def halo_velocity_density_profiles(halonum):
                                      np.log(dm_radii), 
                                      (tvel**2 + pvel**2)/2)
     
-    return true_sigmar, true_sigmat
+    return true_sigmar, true_sigmat, dm_radii
 
 
 def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
@@ -257,15 +257,13 @@ def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
     PMerr = (pmra_error + pmdec_error) / 2  # mas/yr
 
     Gapp = rrls['GAIA_PHOT_G_MEAN_MAG'].to_numpy()  # mag
-    dist = 10**((Grrl - Gapp - 5)/-5)  # pc
+    # dist = 10**((Grrl - Gapp - 5)/-5)  # pc
 
     vlos = rrls['VRAD'].to_numpy()  # km/s
     vloserr = rrls['VRAD_ERR'].to_numpy()  # km/s
 
     l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
                                                     ra, dec, pmra, pmdec)
-    x, y, z = agama.getGalactocentricFromGalactic(l, b, dist)
-    radii = np.sqrt(x**2 + y**2 + z**2)  # kpc
 
     # back to degrees
     l   /= d2r  
@@ -274,9 +272,9 @@ def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
 
     filt = (abs(b) >= bmin) * (dec >= decmin) * (Gapp > Gmin) * (Gapp < Gmax)
 
-    true_sigmar, true_sigmat = halo_velocity_density_profiles(halonum)
+    true_sigmar, true_sigmat, true_dens_radii = halo_velocity_density_profiles(halonum)
 
-    return (l[filt], b[filt], radii, Gapp[filt], pml[filt], pmb[filt],
+    return (l[filt], b[filt], true_dens_radii, Gapp[filt], pml[filt], pmb[filt],
             vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat, lsr_info)
 
 
