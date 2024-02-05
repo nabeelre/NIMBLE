@@ -5,8 +5,9 @@ import astropy.units as u
 
 import numpy as np, pandas as pd, h5py, agama
 import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
 
-Gmax  = 20.0
+Gmax  = 19.0
 Gmin  = 16.0
 Grrl  = 0.58
 DMerr = 0.24
@@ -68,7 +69,6 @@ def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
     write_path: str
         Path to write RRL mocks to
     """
-
     print(f"Writing mock RRL sample for H{halonum} at {lsrdeg}deg")
 
     if source_path is None:
@@ -86,9 +86,22 @@ def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
     dist = coord.Distance(parallax=true['PARALLAX']*u.mas)
     true['GMAG'] = true['APP_GMAG'] - dist.distmod.value
 
-    select_RRL = (true['AGE'] > 10) & (true['MASS'] > 0.7) & (true['MASS'] < 0.9) & \
-                 (true['FEH'] < -0.5) & (true['TEFF'] > 6000) & (true['TEFF'] < 7000) & \
-                 (true['GMAG'] > 0.45) & (true['GMAG'] < 0.65)
+    # draw boxes around horizontal branch
+    box1 = [[9750,3.7], [9750,3.3], [5500,2.2], [5500,2.7]]
+    box2 = [[9750,0.4], [9750,0.85], [5500,0.85], [5500,0.4]]
+    p1 = Polygon(box1)
+    p2 = Polygon(box2)
+    in_box1 = p1.get_path().contains_points(true[['TEFF', 'LOGG']].to_pandas().to_numpy())
+    in_box2 = p2.get_path().contains_points(true[['TEFF', 'GMAG']].to_pandas().to_numpy())
+
+    # apply horizontal branch cut, use TEFF to separate BHB and RRL
+    is_hb = in_box1 & in_box2 & (true['AGE'] > 8)
+    select_RRL = is_hb & (true['TEFF'] > 6000) & (true['TEFF'] < 7300)
+
+    # Old cut
+    # select_RRL = (true['AGE'] > 10) & (true['MASS'] > 0.7) & (true['MASS'] < 0.9) & \
+    #              (true['FEH'] < -0.5) & (true['TEFF'] > 6000) & (true['TEFF'] < 7000) & \
+    #              (true['GMAG'] > 0.45) & (true['GMAG'] < 0.65)
 
     def is_RRL(arr):
         return arr[select_RRL]
