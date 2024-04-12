@@ -50,79 +50,79 @@ def get_lsr_frame(halonum):
     return galcen_distance.value, galcen_v_sun.value, z_sun.to(u.kpc).value
 
 
-def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
-    """
-    Read AuriDESI fits files and output csv of mock RRL stars ready for input
-    into deconv.py
+# def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
+#     """
+#     Read AuriDESI fits files and output csv of mock RRL stars ready for input
+#     into deconv.py
 
-    Parameters
-    ----------
-    halonum: str
-        Auriga halo number of mock to write ("06", "16", "21", "23", "24", "27")
+#     Parameters
+#     ----------
+#     halonum: str
+#         Auriga halo number of mock to write ("06", "16", "21", "23", "24", "27")
 
-    lsrdeg: str
-        LSR position for AuriDESI mock ("030", "120", "210", "300")
+#     lsrdeg: str
+#         LSR position for AuriDESI mock ("030", "120", "210", "300")
 
-    source_path: str
-        Path to load AuriDESI mocks from
+#     source_path: str
+#         Path to load AuriDESI mocks from
 
-    write_path: str
-        Path to write RRL mocks to
-    """
-    print(f"Writing mock RRL sample for H{halonum} at {lsrdeg}deg")
+#     write_path: str
+#         Path to write RRL mocks to
+#     """
+#     print(f"Writing mock RRL sample for H{halonum} at {lsrdeg}deg")
 
-    if source_path is None:
-        source_path = f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mock.fits"
-    header = fits.open(source_path)[0].header
+#     if source_path is None:
+#         source_path = f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mock.fits"
+#     header = fits.open(source_path)[0].header
 
-    rvtab =    Table.read(source_path, hdu='rvtab')
-    fibermap = Table.read(source_path, hdu='fibermap')
-    gaia =     Table.read(source_path, hdu='gaia')
-    true =     Table.read(source_path, hdu='true_values')
-    # prog =     Table.read(source_path, hdu='progenitors')
+#     rvtab =    Table.read(source_path, hdu='rvtab')
+#     fibermap = Table.read(source_path, hdu='fibermap')
+#     gaia =     Table.read(source_path, hdu='gaia')
+#     true =     Table.read(source_path, hdu='true_values')
+#     # prog =     Table.read(source_path, hdu='progenitors')
 
-    print("Initial particle count:", len(rvtab))
+#     print("Initial particle count:", len(rvtab))
 
-    dist = coord.Distance(parallax=true['PARALLAX']*u.mas)
-    true['GMAG'] = true['APP_GMAG'] - dist.distmod.value
+#     dist = coord.Distance(parallax=true['PARALLAX']*u.mas)
+#     true['GMAG'] = true['APP_GMAG'] - dist.distmod.value
 
-    # draw boxes around horizontal branch
-    box1 = [[9750,3.7], [9750,3.3], [5500,2.2], [5500,2.7]]
-    box2 = [[9750,0.4], [9750,0.85], [5500,0.85], [5500,0.4]]
-    p1 = Polygon(box1)
-    p2 = Polygon(box2)
-    in_box1 = p1.get_path().contains_points(true[['TEFF', 'LOGG']].to_pandas().to_numpy())
-    in_box2 = p2.get_path().contains_points(true[['TEFF', 'GMAG']].to_pandas().to_numpy())
+#     # draw boxes around horizontal branch
+#     box1 = [[9750,3.7], [9750,3.3], [5500,2.2], [5500,2.7]]
+#     box2 = [[9750,0.4], [9750,0.85], [5500,0.85], [5500,0.4]]
+#     p1 = Polygon(box1)
+#     p2 = Polygon(box2)
+#     in_box1 = p1.get_path().contains_points(true[['TEFF', 'LOGG']].to_pandas().to_numpy())
+#     in_box2 = p2.get_path().contains_points(true[['TEFF', 'GMAG']].to_pandas().to_numpy())
 
-    # apply horizontal branch cut, use TEFF to separate BHB and RRL
-    is_hb = in_box1 & in_box2 & (true['AGE'] > 8)
-    select_RRL = is_hb & (true['TEFF'] > 6000) & (true['TEFF'] < 7300)
+#     # apply horizontal branch cut, use TEFF to separate BHB and RRL
+#     is_hb = in_box1 & in_box2 & (true['AGE'] > 8)
+#     select_RRL = is_hb & (true['TEFF'] > 6000) & (true['TEFF'] < 7300)
 
-    # Old cut
-    # select_RRL = (true['AGE'] > 10) & (true['MASS'] > 0.7) & (true['MASS'] < 0.9) & \
-    #              (true['FEH'] < -0.5) & (true['TEFF'] > 6000) & (true['TEFF'] < 7000) & \
-    #              (true['GMAG'] > 0.45) & (true['GMAG'] < 0.65)
+#     # Old cut
+#     # select_RRL = (true['AGE'] > 10) & (true['MASS'] > 0.7) & (true['MASS'] < 0.9) & \
+#     #              (true['FEH'] < -0.5) & (true['TEFF'] > 6000) & (true['TEFF'] < 7000) & \
+#     #              (true['GMAG'] > 0.45) & (true['GMAG'] < 0.65)
 
-    def is_RRL(arr):
-        return arr[select_RRL]
+#     def is_RRL(arr):
+#         return arr[select_RRL]
     
-    rrls = Table(
-        list(map(is_RRL, [gaia['RA'], gaia['DEC'], gaia['PMRA'], 
-                          gaia['PMRA_ERROR'], gaia['PMDEC'], gaia['PMDEC_ERROR'],
-                          rvtab['VRAD'], rvtab['VRAD_ERR'], 
-                          fibermap['GAIA_PHOT_G_MEAN_MAG'], true['RA'], 
-                          true['DEC'], true['PMRA'], true['PMDEC'], 
-                          true['PARALLAX'], true['VRAD']])), 
-        names=['RA', 'DEC', 'PMRA', 'PMRA_ERROR', 'PMDEC', 'PMDEC_ERROR', 
-               'VRAD', 'VRAD_ERR', 'GAIA_PHOT_G_MEAN_MAG', 'TRUE_RA', 
-               'TRUE_DEC', 'TRUE_PMRA', 'TRUE_PMDEC', 'TRUE_PARALLAX', 
-               'TRUE_VRAD']
-    )
-    print("RR Lyrae count:", len(rrls), "\n")
+#     rrls = Table(
+#         list(map(is_RRL, [gaia['RA'], gaia['DEC'], gaia['PMRA'], 
+#                           gaia['PMRA_ERROR'], gaia['PMDEC'], gaia['PMDEC_ERROR'],
+#                           rvtab['VRAD'], rvtab['VRAD_ERR'], 
+#                           fibermap['GAIA_PHOT_G_MEAN_MAG'], true['RA'], 
+#                           true['DEC'], true['PMRA'], true['PMDEC'], 
+#                           true['PARALLAX'], true['VRAD']])), 
+#         names=['RA', 'DEC', 'PMRA', 'PMRA_ERROR', 'PMDEC', 'PMDEC_ERROR', 
+#                'VRAD', 'VRAD_ERR', 'GAIA_PHOT_G_MEAN_MAG', 'TRUE_RA', 
+#                'TRUE_DEC', 'TRUE_PMRA', 'TRUE_PMDEC', 'TRUE_PARALLAX', 
+#                'TRUE_VRAD']
+#     )
+#     print("RR Lyrae count:", len(rrls), "\n")
 
-    if write_path is None:
-        write_path = f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mockRRL.csv"
-    rrls.write(write_path, delimiter=',', format='ascii', overwrite=True)
+#     if write_path is None:
+#         write_path = f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mockRRL.csv"
+#     rrls.write(write_path, delimiter=',', format='ascii', overwrite=True)
 
 
 def write_true(halonum):
@@ -251,29 +251,36 @@ def halo_velocity_density_profiles(halonum):
 
 
 def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
-    rrls = pd.read_csv(f"data/AuriDESI_Spec/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mockRRL.csv")
-    print("Number of initial particles:", len(rrls))
+    fname = f"data/AuriDESI/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_rrl.fits"
+
+    rvtab =    Table.read(fname, hdu='rvtab')
+    fibermap = Table.read(fname, hdu='fibermap')
+    gaia =     Table.read(fname, hdu='gaia')
+    # true =     Table.read(fname, hdu='true_value')
+
+    print("Number of initial particles:", len(rvtab))
 
     lsr_info = get_lsr_frame(halonum)
 
-    ra = rrls['RA'].to_numpy()  # deg
-    dec = rrls['DEC'].to_numpy()  # deg
+    ra = np.asarray(gaia['RA'])  # deg
+    dec = np.asarray(gaia['DEC'])  # deg
     ra  *= d2r  # ra and dec to rad
     dec *= d2r
 
-    pmra = rrls['PMRA'].to_numpy()  # mas/yr
-    pmdec = rrls['PMDEC'].to_numpy()  # mas/yr
-    pmra_error = rrls['PMRA_ERROR'].to_numpy()  # mas/yr
-    pmdec_error = rrls['PMDEC_ERROR'].to_numpy()  # mas/yr
+    pmra = np.asarray(gaia['PMRA'])  # mas/yr
+    pmdec = np.asarray(gaia['PMDEC'])  # mas/yr
+    pmra_error = np.asarray(gaia['PMRA_ERROR'])  # mas/yr
+    pmdec_error = np.asarray(gaia['PMDEC_ERROR'])  # mas/yr
 
     # TODO: fix
     PMerr = (pmra_error + pmdec_error) / 2  # mas/yr
 
-    Gapp = rrls['GAIA_PHOT_G_MEAN_MAG'].to_numpy()  # mag
+    # Use fibermap['dist'] instead?
+    Gapp = np.asarray(fibermap['GAIA_PHOT_G_MEAN_MAG'])  # mag
     # dist = 10**((Grrl - Gapp - 5)/-5)  # pc
 
-    vlos = rrls['VRAD'].to_numpy()  # km/s
-    vloserr = rrls['VRAD_ERR'].to_numpy()  # km/s
+    vlos = np.asarray(fibermap['v_sys_Braga'])  # km/s
+    vloserr = np.asarray(fibermap['v_sys_Braga_err'])  # km/s
 
     l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
                                                     ra, dec, pmra, pmdec)
@@ -319,10 +326,10 @@ if __name__ == "__main__":
     halonums = ["06", "16", "21", "23", "24", "27"]
     lsrdegs = ["030", "120", "210", "300"]
 
-    for lsrdeg in lsrdegs:
-        for halonum in halonums:
-            source_path = nersc_path+f"/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mock.fits"
-            write_mockRRL(halonum, lsrdeg, source_path)
+    # for lsrdeg in lsrdegs:
+    #     for halonum in halonums:
+    #         source_path = nersc_path+f"/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_mock.fits"
+    #         write_mockRRL(halonum, lsrdeg, source_path)
 
     # for halonum in halonums:
     #     write_true(halonum)

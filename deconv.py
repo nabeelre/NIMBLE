@@ -1,7 +1,6 @@
 import os, sys, numpy as np, emcee, corner, matplotlib.pyplot as plt
 import pandas as pd
 import scipy.special, scipy.optimize, agama
-from pygaia.errors.astrometric import total_proper_motion_uncertainty
 from multiprocess import Pool
 
 import latte_helpers as latte, auridesi_helpers as auridesi
@@ -26,6 +25,9 @@ min_knot  = 5   # kpc
 max_knot  = 80  # kpc
 num_knots = 5
 
+min_r     = 1   # kpc
+max_r     = 100 # kpc
+
 
 def write_csv(data, filename, column_titles):
     np.savetxt(
@@ -34,6 +36,7 @@ def write_csv(data, filename, column_titles):
 
 
 def load_IRON(SUBSAMPLE, VERBOSE):
+    # rrls = pd.read_csv("data/gmedinat/iron_RRL_16G19.csv")
     rrls = pd.read_csv("data/gmedinat/DESI-iron_RRLs_v0.2.csv")
 
     ra = rrls['ra'].to_numpy()  # deg
@@ -142,13 +145,13 @@ def parse_knots(argv):
 
 def parse_args(argv):
     kind = argv[1]
-    global min_knot, max_knot, num_knots
+    global min_knot, max_knot, num_knots, min_r, max_r
     knot_override = None
 
     if kind == "latte":
-        lattesim = sys.argv[2].lower()
-        lsr = sys.argv[3].upper()
-        gaia_release = sys.argv[4].upper()
+        lattesim = argv[2].lower()
+        lsr = argv[3].upper()
+        gaia_release = argv[4].upper()
 
         assert(gaia_release in ['DR3', 'DR4', 'DR5'])
         assert(lattesim in ['m12f', 'm12i', 'm12m'])
@@ -162,15 +165,12 @@ def parse_args(argv):
         load_params = (lattesim, lsr, gaia_release)
         load_fnc = latte.load
 
-        if len(sys.argv) == 8:
-            knot_override = parse_knots(sys.argv[5:])
+        if len(argv) == 8:
+            knot_override = parse_knots(argv[5:])
             figs_path += "-".join(map(str, knot_override))+"/"
     elif kind == "auridesi":
-        halonum = sys.argv[2].lower()
-        lsrdeg = sys.argv[3].upper()
-        global Gmax, bmin
-        Gmax = 20.0
-        bmin = 20
+        halonum = argv[2].lower()
+        lsrdeg = argv[3].upper()
 
         assert(halonum in ["06", "16", "21", "23", "24", "27"])
         assert(lsrdeg in ["030", "120", "210", "300"])
@@ -183,8 +183,15 @@ def parse_args(argv):
         load_params = (halonum, lsrdeg)
         load_fnc = auridesi.load
 
-        if len(sys.argv) == 7:
-            knot_override = parse_knots(sys.argv[4:])
+        global Gmax, bmin
+        Gmax = 19.0
+        bmin = 20
+
+        min_r = 10
+        max_r = 70
+
+        if len(argv) == 7:
+            knot_override = parse_knots(argv[4:])
             figs_path += "-".join(map(str, knot_override))+"/"
     elif kind == "iron":
         load_fnc = load_IRON
@@ -195,8 +202,11 @@ def parse_args(argv):
         figs_path = "results/iron/"
         true_path = None
 
-        if len(sys.argv) == 5:
-            knot_override = parse_knots(sys.argv[2:])
+        min_r = 10
+        max_r = 70
+
+        if len(argv) == 5:
+            knot_override = parse_knots(argv[2:])
             figs_path += "-".join(map(str, knot_override))+"/"
 
     if knot_override is not None:
@@ -257,6 +267,7 @@ if __name__ == "__main__":
             raise RuntimeError('Density is non-monotonic')
         # represent the spherically symmetric 1d profile log(rho) as a cubic spline in log(r)
         if truedens:
+            # TODO: make params better suit AuriDESI?
             dens_knots = np.linspace(np.log(1), np.log(200), 12)
         else:
             dens_knots = knots_logr
@@ -358,12 +369,13 @@ if __name__ == "__main__":
         fig = plt.figure(figsize=(7,7))
         axs = fig.subplots(nrows=2, ncols=1, sharex=True, gridspec_kw=dict(hspace=0, height_ratios=[3, 1]))
 
-        r  = np.logspace(0, 2, 200)
+        r  = np.logspace(np.log10(min_r), np.log10(max_r), 200)
         lr = np.log(r)
-        rhist = np.logspace(0, 2, 81)
+        rhist = np.logspace(np.log10(min_r), np.log10(max_r), 81)
         lrhist = np.log(rhist)
         if true_path is not None:
-            knots_logr_true = np.linspace(np.log(1), np.log(200), 12)
+            # TODO: changed from 200 to 100 - okay?
+            knots_logr_true = np.linspace(np.log(min_r), np.log(max_r), 12)
             S = agama.splineLogDensity(knots_logr_true, x=np.log(true_dens_radii), w=np.ones(len(true_dens_radii)), infLeft=True, infRight=True)
             trueparams_dens = np.log((np.exp(S(knots_logr_true))) / (4.0 * np.pi * (np.exp(knots_logr_true)**3)))
             trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]  # set the first element of array to zero and exclude it
@@ -391,7 +403,7 @@ if __name__ == "__main__":
             axs[0].set_title(figs_path)
             axs[0].set_ylabel('3d density of tracers')
             axs[0].set_yscale('log')
-            axs[0].set_xlim(min(r), max(r))
+            axs[0].set_xlim(min_r, max_r)
             axs[0].legend(loc='upper right', frameon=False)
 
             # percent error
@@ -464,7 +476,7 @@ if __name__ == "__main__":
             axs[1,1].set_ylim(-40,40)
             axs[1,1].set_yticklabels([])
 
-            axs[0,0].set_xlim(min(r), max(r)*1.1)
+            axs[0,0].set_xlim(min_r, max_r*1.1)
             axs[0,0].set_title(figs_path)
             axs[1,0].set_xlabel('Galactocentric radius (kpc)')
             axs[1,1].set_xlabel('Galactocentric radius (kpc)')
@@ -644,13 +656,7 @@ if __name__ == "__main__":
     # now, plug resulting density and sigma profiles into the jeans equation
     # one mass profile for each trial of MCMC
 
-    # M = (-sigr^2 * r / G) * (a + b + c)
-    # a = dlnrho/dlnr
-    # b = dlnsigr^2/dlnr
-    # c = 2beta
-    # beta = 1-(sigt/sigr)^2
-
-    r  = np.logspace(0, 2, 201)
+    r  = np.logspace(np.log10(min_r), np.log10(max_r), 201)
     lr = np.log(r)
     G = 4.3e-6  # (kpc km2) / (s2 Msun)
 
@@ -737,7 +743,7 @@ if __name__ == "__main__":
     axs[1].axhline(0, c='k', linewidth=1)
     axs[1].axhline(0.2, c='k', linewidth=0.5, linestyle='dotted')
     axs[1].axhline(-0.2, c='k', linewidth=0.5, linestyle='dotted')
-    axs[1].set_xlim([min(r), max(r)])
+    axs[1].set_xlim([min_r, max_r])
     axs[0].set_ylabel(r"$M(<r) (M_{\odot})$", size=24)
     axs[1].set_xlabel('Galactocentric Radius (kpc)', size=24)
     axs[1].set_ylabel('Fractional Error', size=20)
