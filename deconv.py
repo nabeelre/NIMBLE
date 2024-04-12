@@ -187,8 +187,8 @@ def parse_args(argv):
         Gmax = 19.0
         bmin = 20
 
-        min_r = 10
-        max_r = 70
+        min_r = 1
+        max_r = 200
 
         if len(argv) == 7:
             knot_override = parse_knots(argv[4:])
@@ -267,8 +267,7 @@ if __name__ == "__main__":
             raise RuntimeError('Density is non-monotonic')
         # represent the spherically symmetric 1d profile log(rho) as a cubic spline in log(r)
         if truedens:
-            # TODO: make params better suit AuriDESI?
-            dens_knots = np.linspace(np.log(1), np.log(200), 12)
+            dens_knots = np.linspace(np.log(1), np.log(200), len(knots_logdens))
         else:
             dens_knots = knots_logr
         logrho = agama.CubicSpline(dens_knots, knots_logdens, reg=True)  # ensure monotonic spline (reg)
@@ -374,8 +373,10 @@ if __name__ == "__main__":
         rhist = np.logspace(np.log10(min_r), np.log10(max_r), 81)
         lrhist = np.log(rhist)
         if true_path is not None:
-            # TODO: changed from 200 to 100 - okay?
-            knots_logr_true = np.linspace(np.log(min_r), np.log(max_r), 12)
+            num_true_knots = 12
+            if kind == "auridesi":
+                num_true_knots = 4
+            knots_logr_true = np.linspace(np.log(1), np.log(200), num_true_knots)
             S = agama.splineLogDensity(knots_logr_true, x=np.log(true_dens_radii), w=np.ones(len(true_dens_radii)), infLeft=True, infRight=True)
             trueparams_dens = np.log((np.exp(S(knots_logr_true))) / (4.0 * np.pi * (np.exp(knots_logr_true)**3)))
             trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]  # set the first element of array to zero and exclude it
@@ -569,11 +570,14 @@ if __name__ == "__main__":
     prevavgloglike = -np.inf
     # first find the best-fit model by deterministic optimization algorithm,
     # restarting it several times until it seems to arrive at the global minimum
+    num_tries = 0
     while True:
         if VERBOSE: print('\033[1;37mStarting deterministic search\033[0m')
         # minimization algorithm - so provide a negative likelihood to it
-        params = scipy.optimize.minimize(lambda x: -likelihood(x), params, method='Nelder-Mead',
-            options=dict(maxfev=500)).x
+        params = scipy.optimize.minimize(
+            lambda x: -likelihood(x), params, method='Nelder-Mead',
+            options=dict(maxfev=500)
+        ).x
         maxloglike = likelihood(params)
         if maxloglike - prevmaxloglike < 1.0:
             if VERBOSE:
@@ -584,6 +588,12 @@ if __name__ == "__main__":
         elif VERBOSE:
             print('Improved log-likelihood by %f' % (maxloglike - prevmaxloglike))
         prevmaxloglike = maxloglike
+        
+        num_tries += 1
+
+        if num_tries >= 25:
+            print("Too many tries in deterministic search")
+            exit()
 
     # show profiles and wait for the user to marvel at them
     plotprofiles(params.reshape(1,-1), "preMCMC")
@@ -724,8 +734,14 @@ if __name__ == "__main__":
         color = '#931621'
     elif "06" in description:
         color = 'g'
+    elif "21" in description:
+        color = 'r'
+    elif "24" in description:
+        color = 'b'
     elif "iron" in description:
         color = 'mediumblue'
+    else:
+        color = 'gold'
 
     axs[0].plot(r, Menc_med, c=color, linewidth=2.5, label='Jeans estimate')
     axs[0].fill_between(r, Menc_low, Menc_upp, color=color, alpha=0.3, lw=0, label=r'$\pm1\sigma$ interval')
