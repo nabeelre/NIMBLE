@@ -148,11 +148,11 @@ def parse_args(argv):
         Gmax = 19.0
         auridesi.Gmax = Gmax
         
-        bmin = 20
+        bmin = 30
         auridesi.bmin = bmin
 
         min_r = 1
-        max_r = 200
+        max_r = 100
 
         if len(argv) == 7:
             knot_override = parse_knots(argv[4:])
@@ -169,8 +169,8 @@ def parse_args(argv):
         Gmax = 19.0
         iron.Gmax = Gmax
 
-        min_r = 10
-        max_r = 70
+        min_r = 1
+        max_r = 100
 
         if len(argv) == 5:
             knot_override = parse_knots(argv[2:])
@@ -558,7 +558,7 @@ if __name__ == "__main__":
         
         num_tries += 1
 
-        if num_tries >= 25:
+        if num_tries >= 100:
             print("Too many tries in deterministic search")
             exit()
 
