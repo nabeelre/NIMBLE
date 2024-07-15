@@ -28,8 +28,47 @@ max_knot  = 80  # kpc
 num_knots = 5
 
 min_r     = 1   # kpc
-max_r     = 100 # kpc
+max_r     = 70  # kpc
+use_external_density = True
 
+
+def medina24rrl_rho(radii):
+    # https://ui.adsabs.harvard.edu/abs/2024MNRAS.531.4762M/abstract
+    R_break = 18.0
+    slope_inner = -2.05
+    slope_outer = -4.47
+    A1 = 0.67
+    A2 = 1.52
+    
+    if isinstance(radii, float) or isinstance(radii, int):
+        radii = [radii]
+
+    log10dens = np.zeros(len(radii))
+    for i, r in enumerate(radii):
+        if r < R_break:
+            log10dens[i] = A1 + slope_inner*np.log10(r/8)
+        else:
+            log10dens[i] = A2 + slope_outer*np.log10(r/8)
+            
+    return 10**log10dens
+
+def medina24rrl_dlnrho(log_radii):
+    # https://ui.adsabs.harvard.edu/abs/2024MNRAS.531.4762M/abstract
+    R_break = 18.0
+    slope_inner = -2.05
+    slope_outer = -4.47
+    
+    if isinstance(log_radii, float) or isinstance(log_radii, int):
+        log_radii = [log_radii]
+
+    dlnrho_dlnr = np.zeros(len(log_radii))
+    for i, lr in enumerate(log_radii):
+        if np.exp(lr) < R_break:
+            dlnrho_dlnr[i] = slope_inner
+        else:
+            dlnrho_dlnr[i] = slope_outer
+            
+    return dlnrho_dlnr
 
 def write_csv(data, filename, column_titles):
     np.savetxt(
@@ -169,8 +208,8 @@ def parse_args(argv):
         Gmax = 19.0
         iron.Gmax = Gmax
 
-        min_r = 1
-        max_r = 100
+        min_r = 10
+        max_r = 70
 
         if len(argv) == 5:
             knot_override = parse_knots(argv[2:])
@@ -356,6 +395,8 @@ if __name__ == "__main__":
             if true_path is not None:
                 axs[0].plot(r, truedens, 'k-', label='True')
                 axs[0].set_ylim(min(truedens)*0.2, max(truedens)*2)
+            if use_external_density:
+                axs[0].plot(r, medina24rrl_rho(r))
             # retrieve density profiles of each model in the chain, and compute median and 16/84 percentiles
             results = np.zeros((len(chain), len(r)))
             for i in range(len(chain)):
@@ -658,7 +699,10 @@ if __name__ == "__main__":
 
     dlnrho, dlnsigr, sigr, sigt = np.zeros((4, len(chain_smpl), len(r)))
     for i in range(len(chain_smpl)):
-        dlnrho [i] = modelDensity(chain_smpl[i, 0:len(knots_logr)-1])(lr, der=1)
+        if not use_external_density:
+            dlnrho[i] = modelDensity(chain_smpl[i, 0:len(knots_logr)-1])(lr, der=1)
+        else:
+            dlnrho[i] = medina24rrl_dlnrho(lr)
         dlnsigr[i] = modelSigma(chain_smpl[i, len(knots_logr)-1 : 2*len(knots_logr)-1])(lr, der=1)
         sigr   [i] = np.exp(modelSigma(chain_smpl[i, len(knots_logr)-1 : 2*len(knots_logr)-1])(lr))
         sigt   [i] = np.exp(modelSigma(chain_smpl[i, 2*len(knots_logr)-1 :])(lr))
