@@ -1,7 +1,16 @@
-import os, sys, numpy as np, emcee, corner, matplotlib.pyplot as plt
-import pandas as pd
-import scipy.special, scipy.optimize, agama
+import matplotlib.pyplot as plt
 from multiprocess import Pool
+from datetime import datetime
+import pandas as pd
+import numpy as np
+import corner
+import emcee
+import agama
+import time
+import sys
+import os
+
+import scipy.special, scipy.optimize
 
 import latte_helpers as latte
 import auridesi_helpers as auridesi
@@ -29,7 +38,7 @@ num_knots = 5
 
 min_r     = 1   # kpc
 max_r     = 70  # kpc
-use_external_density = True
+use_external_density = False
 
 
 def medina24rrl_rho(radii):
@@ -52,6 +61,7 @@ def medina24rrl_rho(radii):
             
     return 10**log10dens
 
+
 def medina24rrl_dlnrho(log_radii):
     # https://ui.adsabs.harvard.edu/abs/2024MNRAS.531.4762M/abstract
     R_break = 18.0
@@ -69,6 +79,7 @@ def medina24rrl_dlnrho(log_radii):
             dlnrho_dlnr[i] = slope_outer
             
     return dlnrho_dlnr
+
 
 def write_csv(data, filename, column_titles):
     np.savetxt(
@@ -168,7 +179,6 @@ def parse_args(argv):
 
         if len(argv) == 8:
             knot_override = parse_knots(argv[5:])
-            figs_path += "-".join(map(str, knot_override))+"/"
     elif kind == "auridesi":
         halonum = argv[2].lower()
         lsrdeg = argv[3].upper()
@@ -195,7 +205,6 @@ def parse_args(argv):
 
         if len(argv) == 7:
             knot_override = parse_knots(argv[4:])
-            figs_path += "-".join(map(str, knot_override))+"/"
     elif kind == "iron":
         load_fnc = iron.load
         load_params = ()
@@ -205,7 +214,7 @@ def parse_args(argv):
         figs_path = "results/iron/"
         true_path = None
 
-        Gmax = 19.0
+        Gmax = 20.7
         iron.Gmax = Gmax
 
         min_r = 10
@@ -213,12 +222,15 @@ def parse_args(argv):
 
         if len(argv) == 5:
             knot_override = parse_knots(argv[2:])
-            figs_path += "-".join(map(str, knot_override))+"/"
 
     if knot_override is not None:
         min_knot  = knot_override[0]
         max_knot  = knot_override[1]
         num_knots = knot_override[2]
+        
+    timestamp = datetime.now().strftime('%m%d%y_%H%M')
+    figs_path += "_".join(map(str, (min_knot, max_knot, num_knots)))+"/"
+    figs_path += timestamp + "/"
 
     print("Output to", figs_path)
     return kind, load_fnc, load_params, figs_path, true_path
@@ -230,7 +242,15 @@ if __name__ == "__main__":
     l, b, true_dens_radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
         lsr_info = load_fnc(*load_params, SUBSAMPLE, VERBOSE)
 
-    if VERBOSE: print('Number of particles in survey volume:', len(l))
+    if VERBOSE: 
+        print('Number of particles in survey volume:', len(l))
+        print('Gmax:', Gmax)
+        print('Gmin:', Gmin)
+        print('DMerr:', DMerr)
+        print('bmin:', bmin)
+        print('decmin:', decmin)
+        print('min_r:', min_r)
+        print('max_r:', max_r)
 
     if SUBSAMPLE:
         figs_path += "sub/"
@@ -238,6 +258,7 @@ if __name__ == "__main__":
     if not os.path.exists(figs_path):
         os.makedirs(figs_path)
         if VERBOSE: print("created output directory for figures at " + figs_path)
+    print()
 
     blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
 
@@ -305,9 +326,11 @@ if __name__ == "__main__":
             # as stars become fainter that the limiting magnitude of the survey
             if DMerr==0:
                 mult = ((dm <= Gmax-Grrl) * (dm >= Gmin-Grrl)).astype(float)
-            else: mult = 0.5 * (
-                scipy.special.erf( (Gmax-Grrl-dm) / 2**0.5 / DMerr ) -
-                scipy.special.erf( (Gmin-Grrl-dm) / 2**0.5 / DMerr ) )
+            else: 
+                mult = 0.5 * (
+                    scipy.special.erf( (Gmax-Grrl-dm) / 2**0.5 / DMerr ) -
+                    scipy.special.erf( (Gmin-Grrl-dm) / 2**0.5 / DMerr ) 
+                )
             return np.exp(logrho(logr)) * mult * jac
 
         # first compute the integral over the selection region in the northern Galactic hemisphere

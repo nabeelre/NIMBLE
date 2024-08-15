@@ -9,8 +9,9 @@ d2r   = np.pi/180
 
 def load(SUBSAMPLE, VERBOSE):
     # rrls = pd.read_csv("data/gmedinat/iron_RRL_16G19.csv")
-    rrls = pd.read_csv("data/gmedinat/DESI-iron_RRLs_v0.2.csv")
-
+    rrls = pd.read_csv("data/gmedinat/DESI-iron_RRLs_v0.2_qualcut.csv")
+    if VERBOSE: print('Total number of particles in dataset:', len(rrls))
+    
     ra = rrls['ra'].to_numpy()  # deg
     dec = rrls['dec'].to_numpy()  # deg
     ra  *= d2r  # ra and dec to rad
