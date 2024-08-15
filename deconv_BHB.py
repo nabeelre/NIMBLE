@@ -95,12 +95,12 @@ def getSurveyFootprintBoundary(decmin):
         return -np.pi/2, np.pi/2, lambda b: b*0, np.pi
 
     # 1. obtain the l,b coords of the two poles (south and north) in ICRS
-    lp, bp = agama.transformCelestialCoords(agama.fromICRStoGalactic, [0,0], [-np.pi/2, np.pi/2])
+    lp, bp = agama.transformCelestialCoords(agama.fromICRStoGalactic, [0, 0], [-np.pi/2, np.pi/2])
     # if decmin < decp[0], there is only one loop around the south ICRS pole,
     # likewise if decmin > decp[1], there is only one loop around the north ICRS pole,
     # otherwise there is a boundary spanning the entire range of l
 
-    # 2. find the latitude at which the boundary crosses the meridional lines in l,b containing the poles
+    # 2. find latitude at which boundary crosses the meridional lines in l,b containing the poles
     def rootfinder(b, l0):
         return agama.transformCelestialCoords(agama.fromGalactictoICRS, l0, b)[1] - decmin*d2r
     if decmin*d2r < bp[0]:
@@ -118,10 +118,11 @@ def getSurveyFootprintBoundary(decmin):
     bb = bb*bb*(3-2*bb) * (b2-b1) + b1
     ll = np.zeros(npoints)
     ll[0] = lp[0] if decmin*d2r < bp[0] else lp[1]
-    ll[-1]= lp[1] if decmin*d2r > bp[1] else lp[0]
-    for i in range(1,npoints-1):
+    ll[-1] = lp[1] if decmin*d2r > bp[1] else lp[0]
+    for i in range(1, npoints-1):
         ll[i] = scipy.optimize.brentq(
-            lambda l: agama.transformCelestialCoords(agama.fromGalactictoICRS, l, bb[i])[1] - decmin*d2r,
+            lambda lat: agama.transformCelestialCoords(agama.fromGalactictoICRS,
+                                                       lat, bb[i])[1] - decmin*d2r,
             lp[0], lp[1])
     curve = agama.CubicSpline(bb, ll)
 
@@ -129,12 +130,12 @@ def getSurveyFootprintBoundary(decmin):
     #   lower and upper limit on b,
     #   a function evaluating lmin for the given b,
     #   and lsym such that lmax(b) = 2*lsym - lmin(b).
-    # note that all coords here are in radians, and the range of l is from lsym-pi to lsym+pi (or smaller),
-    # not from 0 to 2pi or -pi to pi; thus the selection boundary doesn't enclose the actual coordinates
-    # of points unless these are shifted to the same angular range, but this doesn't matter for the purpose
-    # of computing the normalization factor (integral of density over the selection region)
+    # note all coords here in radians, and the range of l is from lsym-pi to lsym+pi (or smaller),
+    # not from 0 to 2pi or -pi to pi; thus selection boundary doesn't enclose the actual coordinates
+    # of points unless these are shifted to the same angular range, but this doesn't matter for
+    # computing the normalization factor (integral of density over the selection region)
     if decmin*d2r < bp[0]:
-        # excluded a region inside a closed loop aroung South pole; b can be anywhere between -pi/2 and pi/2
+        # excluded region inside a closed loop around South pole; b anywhere between -pi/2 and pi/2
         return -np.pi/2, np.pi/2, lambda b: curve(b, ext=lp[0]), lp[1]
     elif decmin*d2r <= bp[1]:
         # excluded a region below a curve spanning the entire range of l; b must be >= b1
@@ -493,18 +494,20 @@ if __name__ == "__main__":
     # convert l,b,dist.mod. of all stars into logarithm of Galactocentric radius (observed, not true)
     # unit conversion: degrees to radians for l,b,  mas/yr to km/s/kpc for PM
     dist_obs = 10**(0.2*(Gapp-Grrl)-2)
-    x,y,z,vx,vy,vz = agama.getGalactocentricFromGalactic(
+    x, y, z, vx, vy, vz = agama.getGalactocentricFromGalactic(
         l*d2r, b*d2r, dist_obs, pml*4.74, pmb*4.74, vlos, *lsr_info)
     logr_obs = 0.5 * np.log(x**2 + y**2 + z**2)
     vr_obs = (x*vx+y*vy+z*vz) / np.exp(logr_obs)
     vt_obs = (0.5 * (vx**2+vy**2+vz**2 - vr_obs**2))**0.5
 
-    # create random samples from the distance modulus uncertainty for each star and convert to Galactocentric r
+    # create random samples from distance modulus unc for each star and convert to Galactocentric r
     nsamples = 20  # number of random samples per star
-    Gsamp = (np.random.normal(size=(npoints, nsamples)) * DMerr + Gapp[:,None]).reshape(-1)
+    Gsamp = (np.random.normal(size=(npoints, nsamples)) * DMerr + Gapp[:, None]).reshape(-1)
     dist_samp = 10**(0.2*(Gsamp-Grrl)-2)
-    x,y,z = agama.getGalactocentricFromGalactic(
-        np.repeat(l * d2r, nsamples), np.repeat(b * d2r, nsamples), dist_samp, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2])
+    x, y, z = agama.getGalactocentricFromGalactic(
+        np.repeat(l * d2r, nsamples), np.repeat(b * d2r, nsamples),
+        dist_samp, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2]
+    )
     R = (x**2 + y**2)**0.5
     r = (x**2 + y**2 + z**2)**0.5  # array of samples for Galactocentric radius
     logr_samp = np.log(r)
@@ -514,11 +517,19 @@ if __name__ == "__main__":
     # first compute the expected mean values (pml, pmb, vlos) for a star at rest at a given distance,
     # then repeat the exercise 3 times, setting one of velocity components (v_r, v_theta, v_phi)
     # to 1 km/s, and subtract from the zero-velocity projection.
-    vel0 = np.array(agama.getGalacticFromGalactocentric(x, y, z, x*0, y*0, z*0, *lsr_info)[3:6])
-    velr = np.array(agama.getGalacticFromGalactocentric(x, y, z, x/r, y/r, z/r, *lsr_info)[3:6]) - vel0
-    velt = np.array(agama.getGalacticFromGalactocentric(x, y, z, z/r*x/R, z/r*y/R, -R/r, *lsr_info)[3:6]) - vel0
-    velp = np.array(agama.getGalacticFromGalactocentric(x, y, z, -y/R, x/R, 0*r, *lsr_info)[3:6]) - vel0
-
+    vel0 = np.array(agama.getGalacticFromGalactocentric(x, y, z,
+                                                        x*0, y*0, z*0,
+                                                        *lsr_info)[3:6])
+    velr = np.array(agama.getGalacticFromGalactocentric(x, y, z,
+                                                        x/r, y/r, z/r,
+                                                        *lsr_info)[3:6]) - vel0
+    velt = np.array(agama.getGalacticFromGalactocentric(x, y, z,
+                                                        z/r*x/R, z/r*y/R, -R/r,
+                                                        *lsr_info)[3:6]) - vel0
+    velp = np.array(agama.getGalacticFromGalactocentric(x, y, z,
+                                                        -y/R, x/R, 0*r,
+                                                        *lsr_info)[3:6]) - vel0
+    
     # matrix of shape (2, npoints*nsamples) describing how the two intrinsic velocity dispersions
     # in 3d Galactocentric coords translate to the line-of-sight velocity dispersion at each sample point
     mat_vlos = np.array([ velr[2]**2, velt[2]**2 + velp[2]**2 ])
@@ -528,29 +539,33 @@ if __name__ == "__main__":
     mat_pm   = np.array([
         [velr[0]*velr[0], velt[0]*velt[0] + velp[0]*velp[0]],
         [velr[1]*velr[1], velt[1]*velt[1] + velp[1]*velp[1]],
-        [velr[0]*velr[1], velt[0]*velt[1] + velp[0]*velp[1]] ]) / 4.74**2
+        [velr[0]*velr[1], velt[0]*velt[1] + velp[0]*velp[1]]
+    ]) / 4.74**2
 
-    # difference between the measured PM and Vlos values and the expected mean values at each data sample
+    # difference between the measured PM and Vlos values and expected mean values at each sample
     # (the latter correspond to a zero 3d velocity, translated to the Heliocentric frame)
-    pml_samp  = np.repeat(pml,  nsamples) - vel0[0] / 4.74
-    pmb_samp  = np.repeat(pmb,  nsamples) - vel0[1] / 4.74
+    pml_samp = np.repeat(pml,  nsamples) - vel0[0] / 4.74
+    pmb_samp = np.repeat(pmb,  nsamples) - vel0[1] / 4.74
     vlos_samp = np.repeat(vlos, nsamples) - vel0[2]
-    # vectors of PM and Vlos errors for each data sample, to be added to the model covariance matrices
-    pmlerr2_samp  = np.repeat(PMerr, nsamples)**2
-    pmberr2_samp  = np.repeat(PMerr, nsamples)**2   # here is identical to pml, but in general may be different
+    # vectors of PM and Vlos errors for each sample, to be added to the model covariance matrices
+    pmlerr2_samp = np.repeat(PMerr, nsamples)**2
+    # here is identical to pml, but in general may be different
+    pmberr2_samp = np.repeat(PMerr, nsamples)**2
     vloserr2_samp = np.repeat(vloserr, nsamples)**2
 
     # knots in Galactocentric radius (minimum is imposed by our cut |b|>30, maximum - by the extent of data)
     knots_logr = np.linspace(np.log(min_knot), np.log(max_knot), num_knots)
 
     # initial values of parameters
-    params_dens    = -np.linspace(1, 3, len(knots_logr)-1)**2  # log of (un-normalized) density values at radial knots
-    params_sigmar  = np.zeros(len(knots_logr)) + 5.0   # log of radial velocity dispersion values at the radial knots
-    params_sigmat  = np.zeros(len(knots_logr)) + 5.0   # same for tangential dispersion
-    params         = np.hstack((params_dens, params_sigmar, params_sigmat))
-    paramnames     = [ 'logrho(r=%4.1f)' % r for r in np.exp(knots_logr[1:]) ] + \
-        [ 'sigmar(r=%4.1f)' % r for r in np.exp(knots_logr) ] + \
-        [ 'sigmat(r=%4.1f)' % r for r in np.exp(knots_logr) ]
+    # log of (un-normalized) density values at radial knots
+    params_dens = -np.linspace(1, 3, len(knots_logr)-1)**2
+    # log of radial velocity dispersion values at the radial knots
+    params_sigmar = np.zeros(len(knots_logr)) + 5.0
+    params_sigmat = np.zeros(len(knots_logr)) + 5.0   # same for tangential dispersion
+    params = np.hstack((params_dens, params_sigmar, params_sigmat))
+    paramnames = ['logrho(r=%4.1f)' % r for r in np.exp(knots_logr[1:])] + \
+        ['sigmar(r=%4.1f)' % r for r in np.exp(knots_logr)] + \
+        ['sigmat(r=%4.1f)' % r for r in np.exp(knots_logr)]
     prevmaxloglike = -np.inf
     prevavgloglike = -np.inf
     # first find the best-fit model by deterministic optimization algorithm,
@@ -613,21 +628,25 @@ if __name__ == "__main__":
             walkll = sampler.lnprobability[:,-1]
             if VERBOSE:
                 for i in range(len(params)):
-                    print('%s = %8.4g +- %7.4g' % (paramnames[i], np.mean(chain[:,i]), np.std(chain[:,i])))
+                    print('%s = %8.4g +- %7.4g' % (paramnames[i],
+                                                   np.mean(chain[:, i]),
+                                                   np.std(chain[:, i])))
                 print('max loglikelihood: %.2f, average: %.2f' % (maxloglike, avgloglike))
-            converged = abs(maxloglike-prevmaxloglike) < 1.0 and abs(avgloglike-prevavgloglike) < 2.0
+            converged = abs(maxloglike-prevmaxloglike) < 1.0 and \
+                abs(avgloglike-prevavgloglike) < 2.0
             prevmaxloglike = maxloglike
             prevavgloglike = avgloglike
             if converged:
-                if VERBOSE: print('\033[1;37mConverged\033[0m');
+                if VERBOSE:
+                    print('\033[1;37mConverged\033[0m')
                 plotprofiles(chain[::20], "converged")
 
             # produce diagnostic plots after each MCMC episode:
             # 1. evolution of parameters along the chain for each walker
             if VERBOSE:
-                axes = plt.subplots(len(params)+1, 1, sharex=True, figsize=(10,10))[1]
+                axes = plt.subplots(len(params)+1, 1, sharex=True, figsize=(10, 10))[1]
                 for i in range(len(params)):
-                    axes[i].plot(sampler.chain[:,:,i].T, color='k', alpha=0.3)
+                    axes[i].plot(sampler.chain[:, :, i].T, color='k', alpha=0.3)
                     axes[i].set_xticklabels([])
                     axes[i].set_ylabel(paramnames[i])
                 axes[0].set_title(figs_path)
@@ -635,16 +654,19 @@ if __name__ == "__main__":
                 axes[-1].set_ylabel('likelihood')   # bottom panel is the evolution of likelihood
                 axes[-1].set_ylim(maxloglike-3*len(params), maxloglike)
                 plt.tight_layout(h_pad=0)
-                plt.subplots_adjust(hspace=0,wspace=0)
-                plt.savefig(figs_path+"param_evol_iter"+str(iter)+".png", dpi=200, bbox_inches='tight')
+                plt.subplots_adjust(hspace=0, wspace=0)
+                plt.savefig(figs_path+"param_evol_iter"+str(iter)+".png",
+                            dpi=200, bbox_inches='tight')
                 plt.cla()
                 # 2. corner plot - covariances of all parameters
-                corner.corner(chain, quantiles=[0.16, 0.5, 0.84], labels=paramnames, show_titles=True)
+                corner.corner(chain, quantiles=[0.16, 0.5, 0.84],
+                              labels=paramnames, show_titles=True)
                 plt.title(figs_path)
                 plt.savefig(figs_path+"corner_iter"+str(iter)+".png", dpi=200, bbox_inches='tight')
                 plt.cla()
             # 3. density and velocity dispersion profiles - same as before
-            if not converged: plotprofiles(chain[::20], "MCMC_iter"+str(iter))
+            if not converged:
+                plotprofiles(chain[::20], "MCMC_iter"+str(iter))
             iter += 1
     plt.cla()
 
@@ -709,9 +731,10 @@ if __name__ == "__main__":
     # Mass enclosed plot
     plt.rcParams.update({'font.size': 18})
     plt.rcParams['agg.path.chunksize'] = 10000  # overflow error on line 835 without this
-    fig = plt.figure(figsize=(15,10))
-    axs = fig.subplots(nrows=2, ncols=1, sharex=True, gridspec_kw=dict(hspace=0, height_ratios=[3, 1]))
-
+    fig = plt.figure(figsize=(15, 10))
+    axs = fig.subplots(nrows=2, ncols=1, sharex=True,
+                       gridspec_kw=dict(hspace=0, height_ratios=[3, 1]))
+    
     description = kind+" ".join(load_params)
 
     if "m12f" in description:
@@ -732,7 +755,8 @@ if __name__ == "__main__":
         color = 'gold'
 
     axs[0].plot(r, Menc_med, c=color, linewidth=2.5, label='Jeans estimate')
-    axs[0].fill_between(r, Menc_low, Menc_upp, color=color, alpha=0.3, lw=0, label=r'$\pm1\sigma$ interval')
+    axs[0].fill_between(r, Menc_low, Menc_upp, color=color, alpha=0.3,
+                        lw=0, label=r'$\pm1\sigma$ interval')
 
     if true_path is not None:
         axs[0].plot(r_true, M_true, c='k', linewidth=1.5, linestyle='dashed', label='True')
