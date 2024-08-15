@@ -222,32 +222,39 @@ def halo_velocity_density_profiles(halonum):
     f = h5py.File(filename, 'r')
 
     # Extract data from Auriga hdf5 file
-    dm_coordinates = f['PartType1']['Coordinates'][:]*1000  # (Z, Y, X) in kpc
-    dm_velocities  = f['PartType1']['Velocities'] [:]       # (Vz, Vy, Vx) in km/s
+    coordinates = f['PartType4']['Coordinates'][:]*1000  # (Z, Y, X) in kpc
+    velocities  = f['PartType4']['Velocities'] [:]       # (Vz, Vy, Vx) in km/s
+    metallicity = f['PartType4']['GFM_Metallicity']         [:]
+    form_time   = f['PartType4']['GFM_StellarFormationTime'][:] # Gyr
 
-    dm_x = dm_coordinates[:,2]
-    dm_y = dm_coordinates[:,1]
-    dm_z = dm_coordinates[:,0]
+    # Set floor for halo metallicity
+    metal_mask = metallicity < 1e-7
+    metallicity[metal_mask] = 1e-7
+    log_metallicity = np.log10(metallicity / 0.0127)
 
-    dm_vx = dm_velocities[:,2]
-    dm_vy = dm_velocities[:,1]
-    dm_vz = dm_velocities[:,0]
+    # Old, low metallicity to select halo - also removes wind particles
+    halo = (log_metallicity < -1.5) & (form_time > 8)
 
-    dm_radii = np.sqrt((dm_x ** 2) + (dm_y ** 2) + (dm_z ** 2))
-    rvel, tvel, pvel = cartesian_to_spherical(dm_x, dm_y, dm_z, 
-                                              dm_vx, dm_vy, dm_vz)
+    x = coordinates[:,2][halo]
+    y = coordinates[:,1][halo]
+    z = coordinates[:,0][halo]
+
+    vx = velocities[:,2][halo]
+    vy = velocities[:,1][halo]
+    vz = velocities[:,0][halo]
+
+    radii = np.sqrt((x ** 2) + (y ** 2) + (z ** 2))
+    rvel, tvel, pvel = cartesian_to_spherical(x, y, z, vx, vy, vz)
     
-    truesig_knots = np.logspace(0, np.log10(100), 10)
+    truesig_knots = np.logspace(0, np.log10(100), 5)
 
     # velocity squared as function of log r
     true_sigmar = agama.splineApprox(np.log(truesig_knots), 
-                                     np.log(dm_radii), 
-                                     rvel**2)
+                                     np.log(radii), rvel**2)
     true_sigmat = agama.splineApprox(np.log(truesig_knots), 
-                                     np.log(dm_radii), 
-                                     (tvel**2 + pvel**2)/2)
+                                     np.log(radii), (tvel**2 + pvel**2)/2)
     
-    return true_sigmar, true_sigmat, dm_radii
+    return true_sigmar, true_sigmat, radii
 
 
 def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
@@ -320,6 +327,39 @@ def cartesian_to_spherical(xpos, ypos, zpos, xVel, yVel, zVel):
     pVel = sphereVels[2]
     
     return rVel, tVel, pVel
+
+
+def rv_to_gsr(c, v_sun=None):
+    """
+    From Adrian Price-Whelan (Astropy)
+    Transform a barycentric radial velocity to the Galactic Standard of Rest
+    (GSR).
+    The input radial velocity must be passed in as a
+    Parameters
+    ----------
+    c : `~astropy.coordinates.BaseCoordinateFrame` subclass instance
+        The radial velocity, associated with a sky coordinates, to be
+        transformed.
+    v_sun : `~astropy.units.Quantity`, optional
+        The 3D velocity of the solar system barycenter in the GSR frame.
+        Defaults to the same solar motion as in the
+        `~astropy.coordinates.Galactocentric` frame.
+    Returns
+    -------
+    v_gsr : `~astropy.units.Quantity`
+        The input radial velocity transformed to a GSR frame.
+    """
+    if v_sun is None:
+        v_sun = coord.Galactocentric().galcen_v_sun.to_cartesian()
+        
+    gal = c.transform_to(coord.Galactic)
+    
+    cart_data = gal.data.to_cartesian()
+    
+    unit_vector = cart_data / cart_data.norm()
+    v_proj = v_sun.dot(unit_vector)
+    
+    return c.radial_velocity + v_proj
 
 
 if __name__ == "__main__":
