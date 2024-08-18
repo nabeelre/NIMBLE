@@ -209,7 +209,7 @@ def parse_args(argv):
         if len(argv) == 7:
             knot_override = parse_knots(argv[4:])
     elif kind == "iron":
-        load_fnc = iron.load
+        load_fnc = iron.load_RRL
         load_params = ()
 
         print("\033[1;33m**** RUNNING IRON ****\033[0m")
@@ -217,11 +217,11 @@ def parse_args(argv):
         figs_path = "results/iron/"
         true_path = None
 
-        Gmax = 20.7
+        Gmax = 20.5
         iron.Gmax = Gmax
 
-        min_r = 10
-        max_r = 70
+        min_r = 20
+        max_r = 100
 
         if len(argv) == 5:
             knot_override = parse_knots(argv[2:])
@@ -255,7 +255,6 @@ if __name__ == "__main__":
         print('min_r:', min_r)
         print('max_r:', max_r)
 
-
     if SUBSAMPLE:
         figs_path += "sub/"
 
@@ -263,7 +262,6 @@ if __name__ == "__main__":
         os.makedirs(figs_path)
         if VERBOSE: print("created output directory for figures at " + figs_path)
     print()
-
 
     blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
 

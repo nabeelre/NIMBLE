@@ -32,7 +32,7 @@ decmin = -35.0   # min declination for the selection box (degrees)
 d2r = np.pi/180  # conversion from degrees to radians
 
 min_knot = 5   # kpc
-max_knot = 80  # kpc
+max_knot = 40  # kpc
 num_knots = 5
 
 min_r = 1   # kpc
