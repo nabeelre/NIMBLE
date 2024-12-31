@@ -1,11 +1,14 @@
 from astropy.table import Table
-from astropy.io import fits
+# from astropy.io import fits
 import astropy.coordinates as coord
 import astropy.units as u
 
-import numpy as np, pandas as pd, h5py, agama
+import numpy as np
+# import pandas as pd
+import h5py
+import agama
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
+# from matplotlib.patches import Polygon
 
 Gmax  = 19.0
 Gmin  = 16.0
@@ -27,7 +30,7 @@ def get_lsr_frame(halonum):
     usun = 11.1
     vsun = 12.24
     wsun =  7.25
-    
+
     if halonum == "06":
         vlsr = 229.2225816451948
     elif halonum == "16":
@@ -105,17 +108,17 @@ def get_lsr_frame(halonum):
 
 #     def is_RRL(arr):
 #         return arr[select_RRL]
-    
+
 #     rrls = Table(
-#         list(map(is_RRL, [gaia['RA'], gaia['DEC'], gaia['PMRA'], 
+#         list(map(is_RRL, [gaia['RA'], gaia['DEC'], gaia['PMRA'],
 #                           gaia['PMRA_ERROR'], gaia['PMDEC'], gaia['PMDEC_ERROR'],
-#                           rvtab['VRAD'], rvtab['VRAD_ERR'], 
-#                           fibermap['GAIA_PHOT_G_MEAN_MAG'], true['RA'], 
-#                           true['DEC'], true['PMRA'], true['PMDEC'], 
-#                           true['PARALLAX'], true['VRAD']])), 
-#         names=['RA', 'DEC', 'PMRA', 'PMRA_ERROR', 'PMDEC', 'PMDEC_ERROR', 
-#                'VRAD', 'VRAD_ERR', 'GAIA_PHOT_G_MEAN_MAG', 'TRUE_RA', 
-#                'TRUE_DEC', 'TRUE_PMRA', 'TRUE_PMDEC', 'TRUE_PARALLAX', 
+#                           rvtab['VRAD'], rvtab['VRAD_ERR'],
+#                           fibermap['GAIA_PHOT_G_MEAN_MAG'], true['RA'],
+#                           true['DEC'], true['PMRA'], true['PMDEC'],
+#                           true['PARALLAX'], true['VRAD']])),
+#         names=['RA', 'DEC', 'PMRA', 'PMRA_ERROR', 'PMDEC', 'PMDEC_ERROR',
+#                'VRAD', 'VRAD_ERR', 'GAIA_PHOT_G_MEAN_MAG', 'TRUE_RA',
+#                'TRUE_DEC', 'TRUE_PMRA', 'TRUE_PMDEC', 'TRUE_PARALLAX',
 #                'TRUE_VRAD']
 #     )
 #     print("RR Lyrae count:", len(rrls), "\n")
@@ -133,7 +136,7 @@ def write_true(halonum):
     ----------
     halonum: str
         Auriga halo number of mock to write ("06", "16", "21", "23", "24", "27")
-    
+
     Auriga halos downloaded from:
     https://wwwmpa.mpa-garching.mpg.de/auriga/data.html
     """
@@ -156,26 +159,15 @@ def write_true(halonum):
 
     f.close()
 
-    total_mass = np.sum(np.hstack((dm_masses, star_wind_masses, 
+    total_mass = np.sum(np.hstack((dm_masses, star_wind_masses,
                                    gas_masses, bh_masses)))
     print("total mass (1e12 Msun):", total_mass/1e12)
 
     # r_sph = sqrt(x^2 + y^2 + z^2)
-    star_wind_radii = np.sqrt((star_wind_coordinates[:,2] ** 2) + 
-                              (star_wind_coordinates[:,1] ** 2) + 
-                              (star_wind_coordinates[:,0] ** 2))
-
-    gas_radii = np.sqrt((gas_coordinates[:,2] ** 2) + 
-                        (gas_coordinates[:,1] ** 2) + 
-                        (gas_coordinates[:,0] ** 2))
-
-    dm_radii = np.sqrt((dm_coordinates[:,2] ** 2) + 
-                       (dm_coordinates[:,1] ** 2) + 
-                       (dm_coordinates[:,0] ** 2))
-    
-    bh_radii = np.sqrt((bh_coordinates[:,2] ** 2) + 
-                       (bh_coordinates[:,1] ** 2) + 
-                       (bh_coordinates[:,0] ** 2))
+    star_wind_radii = np.sqrt((star_wind_coordinates[:,2] ** 2) + (star_wind_coordinates[:,1] ** 2) + (star_wind_coordinates[:,0] ** 2))
+    gas_radii = np.sqrt((gas_coordinates[:,2] ** 2) + (gas_coordinates[:,1] ** 2) + (gas_coordinates[:,0] ** 2))
+    dm_radii = np.sqrt((dm_coordinates[:,2] ** 2) + (dm_coordinates[:,1] ** 2) + (dm_coordinates[:,0] ** 2))
+    bh_radii = np.sqrt((bh_coordinates[:,2] ** 2) + (bh_coordinates[:,1] ** 2) + (bh_coordinates[:,0] ** 2))
 
     # rows are particles
     # column 0 is spherical galactocentric radius
@@ -191,7 +183,7 @@ def write_true(halonum):
     M_cumul_gas       = np.interp(rgrid, gas[:,0],       np.cumsum(gas[:,1]))
     M_cumul_dm        = np.interp(rgrid, dm[:,0],        np.cumsum(dm[:,1]))
     M_cumul_bh        = np.interp(rgrid, bh[:,0],        np.cumsum(bh[:,1]))
-    
+
     M_cumul = M_cumul_star_wind + M_cumul_gas + M_cumul_dm + M_cumul_bh
 
     np.savetxt(
@@ -245,15 +237,15 @@ def halo_velocity_density_profiles(halonum):
 
     radii = np.sqrt((x ** 2) + (y ** 2) + (z ** 2))
     rvel, tvel, pvel = cartesian_to_spherical(x, y, z, vx, vy, vz)
-    
+
     truesig_knots = np.logspace(0, np.log10(100), 5)
 
     # velocity squared as function of log r
-    true_sigmar = agama.splineApprox(np.log(truesig_knots), 
+    true_sigmar = agama.splineApprox(np.log(truesig_knots),
                                      np.log(radii), rvel**2)
-    true_sigmat = agama.splineApprox(np.log(truesig_knots), 
+    true_sigmat = agama.splineApprox(np.log(truesig_knots),
                                      np.log(radii), (tvel**2 + pvel**2)/2)
-    
+
     return true_sigmar, true_sigmat, radii
 
 
@@ -293,7 +285,7 @@ def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
                                                     ra, dec, pmra, pmdec)
 
     # back to degrees
-    l   /= d2r  
+    l   /= d2r
     b   /= d2r
     dec /= d2r
 
@@ -373,7 +365,7 @@ def cartesian_to_spherical(xpos, ypos, zpos, xVel, yVel, zVel):
     rVel = sphereVels[0]
     tVel = sphereVels[1]
     pVel = sphereVels[2]
-    
+
     return rVel, tVel, pVel
 
 
@@ -399,14 +391,14 @@ def rv_to_gsr(c, v_sun=None):
     """
     if v_sun is None:
         v_sun = coord.Galactocentric().galcen_v_sun.to_cartesian()
-        
+
     gal = c.transform_to(coord.Galactic)
-    
+
     cart_data = gal.data.to_cartesian()
-    
+
     unit_vector = cart_data / cart_data.norm()
     v_proj = v_sun.dot(unit_vector)
-    
+
     return c.radial_velocity + v_proj
 
 

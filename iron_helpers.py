@@ -1,17 +1,19 @@
-import numpy as np, pandas as pd
+import numpy as np
+import pandas as pd
 import agama
 
-Gmax  = 20.7
+Gmax  = 19.5
 Gmin  = 16.0
 bmin  = 30.0
 decmin=-35.0
 d2r   = np.pi/180
 
+
 def load_RRL(SUBSAMPLE, VERBOSE):
     rrls = pd.read_csv("data/gmedinat/DESI-iron_RRLs_v0.2_qualcut.csv")
     if VERBOSE:
         print('Total number of particles in dataset:', len(rrls))
-    
+
     ra = rrls['ra'].to_numpy()  # deg
     dec = rrls['dec'].to_numpy()  # deg
     ra  *= d2r  # ra and dec to rad
@@ -22,7 +24,6 @@ def load_RRL(SUBSAMPLE, VERBOSE):
     pmra_error = rrls['pmra_error'].to_numpy()  # mas/yr
     pmdec_error = rrls['pmdec_error'].to_numpy()  # mas/yr
 
-    # TODO: fix
     PMerr = (pmra_error + pmdec_error) / 2  # mas/yr
 
     # TODO, restore to phot_g_mean_mag?
@@ -47,15 +48,15 @@ def load_RRL(SUBSAMPLE, VERBOSE):
 
     return (l[filt], b[filt], None, Gapp[filt], pml[filt], pmb[filt],
             vlos[filt], PMerr[filt], vloserr[filt], None, None, lsr_info)
-    
-    
+
+
 def load_BHB(SUBSAMPLE, VERBOSE):
     # TODO: fetch fixed abs mags from Amanda
-    
+
     rrls = pd.read_csv("data/gmedinat/DESI-iron_RRLs_v0.2_qualcut.csv")
     if VERBOSE:
         print('Total number of particles in dataset:', len(rrls))
-    
+
     ra = rrls['ra'].to_numpy()  # deg
     dec = rrls['dec'].to_numpy()  # deg
     ra  *= d2r  # ra and dec to rad
@@ -66,7 +67,6 @@ def load_BHB(SUBSAMPLE, VERBOSE):
     pmra_error = rrls['pmra_error'].to_numpy()  # mas/yr
     pmdec_error = rrls['pmdec_error'].to_numpy()  # mas/yr
 
-    # TODO: fix
     PMerr = (pmra_error + pmdec_error) / 2  # mas/yr
 
     # TODO, restore to phot_g_mean_mag?

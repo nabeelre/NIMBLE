@@ -1,14 +1,14 @@
 import matplotlib.pyplot as plt
 from multiprocess import Pool
 from datetime import datetime
-import pandas as pd
+# import pandas as pd
 import scipy.optimize
 import scipy.special
 import numpy as np
 import corner
 import emcee
 import agama
-import time
+# import time
 import sys
 import os
 
@@ -35,11 +35,11 @@ d2r = np.pi/180  # conversion from degrees to radians
 
 min_knot = 5   # kpc
 max_knot = 80  # kpc
-num_knots = 5
+num_knots = 4
 
 min_r     = 1   # kpc
-max_r     = 70  # kpc
-use_external_density = False
+max_r     = 100  # kpc
+use_external_density = True
 
 
 def medina24rrl_rho(radii):
@@ -49,7 +49,7 @@ def medina24rrl_rho(radii):
     slope_outer = -4.47
     A1 = 0.67
     A2 = 1.52
-    
+
     if isinstance(radii, float) or isinstance(radii, int):
         radii = [radii]
 
@@ -59,7 +59,7 @@ def medina24rrl_rho(radii):
             log10dens[i] = A1 + slope_inner*np.log10(r/8)
         else:
             log10dens[i] = A2 + slope_outer*np.log10(r/8)
-            
+
     return 10**log10dens
 
 
@@ -68,7 +68,7 @@ def medina24rrl_dlnrho(log_radii):
     R_break = 18.0
     slope_inner = -2.05
     slope_outer = -4.47
-    
+
     if isinstance(log_radii, float) or isinstance(log_radii, int):
         log_radii = [log_radii]
 
@@ -78,9 +78,8 @@ def medina24rrl_dlnrho(log_radii):
             dlnrho_dlnr[i] = slope_inner
         else:
             dlnrho_dlnr[i] = slope_outer
-            
-    return dlnrho_dlnr
 
+    return dlnrho_dlnr
 
 
 def write_csv(data, filename, column_titles):
@@ -217,10 +216,10 @@ def parse_args(argv):
         figs_path = "results/iron/"
         true_path = None
 
-        Gmax = 20.5
+        Gmax = 19.5
         iron.Gmax = Gmax
 
-        min_r = 20
+        min_r = 1
         max_r = 100
 
         if len(argv) == 5:
@@ -230,7 +229,7 @@ def parse_args(argv):
         min_knot = knot_override[0]
         max_knot = knot_override[1]
         num_knots = knot_override[2]
-        
+
     timestamp = datetime.now().strftime('%m%d%y_%H%M')
     figs_path += "_".join(map(str, (min_knot, max_knot, num_knots)))+"/"
     figs_path += timestamp + "/"
@@ -245,7 +244,7 @@ if __name__ == "__main__":
     l, b, true_dens_radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
         lsr_info = load_fnc(*load_params, SUBSAMPLE, VERBOSE)
 
-    if VERBOSE: 
+    if VERBOSE:
         print('Number of particles in survey volume:', len(l))
         print('Gmax:', Gmax)
         print('Gmin:', Gmin)
@@ -260,7 +259,8 @@ if __name__ == "__main__":
 
     if not os.path.exists(figs_path):
         os.makedirs(figs_path)
-        if VERBOSE: print("created output directory for figures at " + figs_path)
+        if VERBOSE:
+            print("created output directory for figures at " + figs_path)
     print()
 
     blow, bupp, lmin, lsym = getSurveyFootprintBoundary(decmin)
@@ -337,10 +337,9 @@ if __name__ == "__main__":
             # as stars become fainter that the limiting magnitude of the survey
             if DMerr == 0:
                 mult = ((dm <= Gmax-Grrl) * (dm >= Gmin-Grrl)).astype(float)
-            else: 
+            else:
                 mult = 0.5 * (
-                    scipy.special.erf( (Gmax-Grrl-dm) / 2**0.5 / DMerr ) -
-                    scipy.special.erf( (Gmin-Grrl-dm) / 2**0.5 / DMerr ) 
+                    scipy.special.erf( (Gmax-Grrl-dm) / 2**0.5 / DMerr ) - scipy.special.erf( (Gmin-Grrl-dm) / 2**0.5 / DMerr )
                 )
             return np.exp(logrho(logr)) * mult * jac
 
@@ -391,9 +390,9 @@ if __name__ == "__main__":
             det_pm = cov_pmll * cov_pmbb - cov_pmlb**2  # determinant of the PM cov matrix
             # compute likelihoods of Vlos and PM values of each sample, accounting for obs.errors
             like_vlos = cov_vlos**-0.5 * np.exp(-0.5 * vlos_samp**2 / cov_vlos)
-            like_pm = det_pm**-0.5 * np.exp(-0.5 / det_pm * (pml_samp**2 * cov_pmbb
-                                                             + pmb_samp**2 * cov_pmll
-                                                             - 2 * pml_samp * pmb_samp * cov_pmlb))
+            like_pm = det_pm**-0.5 * np.exp(
+                -0.5 / det_pm * (pml_samp**2 * cov_pmbb + pmb_samp**2 * cov_pmll - 2 * pml_samp * pmb_samp * cov_pmlb)
+            )
             # the overall log-likelihood of the model:
             # first average the likelihoods of all sample points for each star -
             # corresponds to marginalization over distance uncs, also propagated to PM space
@@ -426,8 +425,7 @@ if __name__ == "__main__":
             knots_logr_true = np.linspace(np.log(1), np.log(200), num_true_knots)
             S = agama.splineLogDensity(knots_logr_true, x=np.log(true_dens_radii),
                                        w=np.ones(len(true_dens_radii)), infLeft=True, infRight=True)
-            trueparams_dens = np.log((np.exp(S(knots_logr_true))) /
-                                     (4.0 * np.pi * (np.exp(knots_logr_true)**3)))
+            trueparams_dens = np.log((np.exp(S(knots_logr_true))) / (4.0 * np.pi * (np.exp(knots_logr_true)**3)))
             # set the first element of array to zero and exclude it
             trueparams_dens = trueparams_dens[1:] - trueparams_dens[0]
             truedens = np.exp(modelDensity(trueparams_dens, truedens=True)(lr))
@@ -450,8 +448,7 @@ if __name__ == "__main__":
             axs[0].fill_between(r, dens_low, dens_upp, alpha=0.3, lw=0, color='r')
             axs[0].plot(r, dens_med, color='r', label='MCMC Fit')
             count_obs = np.histogram(logr_obs, bins=lrhist)[0]
-            rho_obs = count_obs / (4 * np.pi * (lrhist[1:]-lrhist[:-1]) *
-                                   (rhist[1:]*rhist[:-1])**1.5 * len(Gapp))
+            rho_obs = count_obs / (4 * np.pi * (lrhist[1:]-lrhist[:-1]) * (rhist[1:]*rhist[:-1])**1.5 * len(Gapp))
             axs[0].plot(np.repeat(rhist, 2)[1:-1], np.repeat(rho_obs, 2),
                         'r--', label='with SFs and Errors')
 
@@ -565,8 +562,7 @@ if __name__ == "__main__":
                 write_csv(
                     profiles,
                     "veldisp_dens_profiles.csv",
-                    "r, dens_low, dens_med, dens_upp, truedens, " +
-                    "low_r, med_r, upp_r, truesigr, low_t, med_t, upp_t, truesigt"
+                    "r, dens_low, dens_med, dens_upp, truedens, low_r, med_r, upp_r, truesigr, low_t, med_t, upp_t, truesigt"
                 )
             else:
                 profiles = np.stack([r, dens_low, dens_med, dens_upp,
