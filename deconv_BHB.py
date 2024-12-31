@@ -3,19 +3,19 @@ from multiprocess import Pool
 from datetime import datetime
 import scipy.optimize
 import scipy.special
-import pandas as pd
+# import pandas as pd
 import numpy as np
 import corner
 import emcee
 import agama
-import time
+# import time
 import sys
 import os
 
-import latte_helpers as latte
+# import latte_helpers as latte
 import auridesi_helpers as auridesi
 import iron_helpers as iron
-from deconv import getSurveyFootprintBoundary, write_csv, parse_knots
+from deconv import getSurveyFootprintBoundary, parse_knots
 
 np.set_printoptions(linewidth=200, precision=6, suppress=True)
 np.random.seed(42)
@@ -36,7 +36,13 @@ max_knot = 40  # kpc
 num_knots = 5
 
 min_r = 1   # kpc
-max_r = 70  # kpc
+max_r = 100  # kpc
+
+
+def write_csv(data, filename, column_titles):
+    np.savetxt(
+        fname=figs_path+filename, X=data, delimiter=',', header=column_titles
+    )
 
 
 def medina24rrl_rho(radii):  # TODO, replace with BHB profile
@@ -93,11 +99,11 @@ def parse_args(argv):
 
         print(f"\033[1;33m**** RUNNING AURIDESI {halonum} {lsrdeg} ****\033[0m")
 
-        figs_path = f"results/auridesi/deconv_{halonum}_{lsrdeg}/"
+        figs_path = f"results/BHB/auridesi/deconv_{halonum}_{lsrdeg}/"
         true_path = f"data/auriga/H{halonum}/Au{halonum}_true.csv"
 
         load_params = (halonum, lsrdeg)
-        load_fnc = auridesi.load
+        load_fnc = auridesi.load_BHB
 
         Gmax = 19.0
         auridesi.Gmax = Gmax
@@ -111,19 +117,21 @@ def parse_args(argv):
         if len(argv) == 7:
             knot_override = parse_knots(argv[4:])
     elif kind == "iron":
-        load_fnc = iron.load
+        load_fnc = iron.load_BHB
         load_params = ()
 
         print("\033[1;33m**** RUNNING IRON ****\033[0m")
 
-        figs_path = "results/iron/"
+        figs_path = "results/BHB/iron/"
         true_path = None
 
-        Gmax = 20.7
+        Gmin = 16.0
+        Gmax = 19.5
+        iron.Gmin = Gmin
         iron.Gmax = Gmax
 
-        min_r = 10
-        max_r = 70
+        min_r = 1
+        max_r = 100
 
         if len(argv) == 5:
             knot_override = parse_knots(argv[2:])
@@ -147,6 +155,9 @@ if __name__ == "__main__":
     # TODO: pull in distance, some apparent mag
     l, b, true_dens_radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
         lsr_info = load_fnc(*load_params, SUBSAMPLE, VERBOSE)
+
+    external_rho = medina24rrl_rho
+    external_dlnrho = medina24rrl_dlnrho
 
     if VERBOSE:
         print('Number of particles in survey volume:', len(l))
@@ -203,7 +214,7 @@ if __name__ == "__main__":
         # check that the density profile has a finite total mass
         # (this is not needed for the fit, because the normalization is computed over the accessible volume,
         # but it generally makes sense to have a physically valid model for the entire space).
-        slope_in  = logrho(dens_knots[ 0], der=1)  # d[log(rho)]/d[log(r)], log-slope at the lower radius
+        slope_in  = logrho(dens_knots[0], der=1)  # d[log(rho)]/d[log(r)], log-slope at the lower radius
         slope_out = logrho(dens_knots[-1], der=1)
         if slope_in <= -3.0 or slope_out >= -3.0:
             raise RuntimeError('Density has invalid asymptotic slope: inner=%.2f, outer=%.2f' % (slope_in, slope_out))
@@ -216,8 +227,8 @@ if __name__ == "__main__":
 
     def likelihood(params):
         # function to be maximized in the MCMC and deterministic optimization
-        params_sigmar = params[0 : len(knots_logr)-1]
-        params_sigmat = params[len(knots_logr)-1 : 2*len(knots_logr)-1]
+        params_sigmar = params[0:len(knots_logr)]
+        params_sigmat = params[len(knots_logr):]
         try:
             # construct intrinsic velocity dispersion profiles of the model
             sigmar2   = np.exp(2*modelSigma(params_sigmar)(logr_samp))  # squared radial velocity dispersion
@@ -234,26 +245,29 @@ if __name__ == "__main__":
             det_pm    = cov_pmll * cov_pmbb - cov_pmlb**2  # determinant of the PM cov matrix
             # compute likelihoods of Vlos and PM values of each data sample, taking into account obs.errors
             like_vlos = cov_vlos**-0.5 * np.exp(-0.5 * vlos_samp**2 / cov_vlos)
-            like_pm   = det_pm**-0.5   * np.exp(-0.5 / det_pm *
-                (pml_samp**2 * cov_pmbb + pmb_samp**2 * cov_pmll - 2 * pml_samp * pmb_samp * cov_pmlb) )
+            like_pm   = det_pm**-0.5 * np.exp(
+                -0.5 / det_pm * (pml_samp**2 * cov_pmbb + pmb_samp**2 * cov_pmll - 2 * pml_samp * pmb_samp * cov_pmlb)
+            )
             # the overall log-likelihood of the model:
             # first average the likelihoods of all sample points for each star -
-            # this corresponds to marginalization over distance uncertainties, also propagated to PM space;
+            # this corresponds to marginalization over distance uncs, also propagated to PM space;
             # then sum up marginalized log-likelihoods of all stars.
             # at this stage may also add a prior if necessary
             loglikelihood = np.sum(np.log(
                 np.mean((like_pm * like_vlos).reshape(npoints, nsamples), axis=1)
             ))
-            #print("%s => %.2f" % (params, loglikelihood))
-            if not np.isfinite(loglikelihood): loglikelihood = -np.inf
+            # print("%s => %.2f" % (params, loglikelihood))
+            if not np.isfinite(loglikelihood):
+                loglikelihood = -np.inf
             return loglikelihood
         except Exception as ex:
-            # if VERBOSE: print("%s => %s" % (params, ex))
+            if VERBOSE:
+                print("%s => %s" % (params, ex))
             return -np.inf
 
     def plotprofiles(chain, plotname=''):
         # Density plots
-        fig = plt.figure(figsize=(7,7))
+        fig = plt.figure(figsize=(7, 7))
         axs = fig.subplots(nrows=2, ncols=1, sharex=True, gridspec_kw=dict(hspace=0, height_ratios=[3, 1]))
 
         r  = np.logspace(np.log10(min_r), np.log10(max_r), 200)
@@ -277,8 +291,7 @@ if __name__ == "__main__":
             if true_path is not None:
                 axs[0].plot(r, truedens, 'k-', label='True')
                 axs[0].set_ylim(min(truedens)*0.2, max(truedens)*2)
-            if use_external_density:
-                axs[0].plot(r, medina24rrl_rho(r))
+            axs[0].plot(r, external_rho(r), c='k', linestyle='dotted', label='assumed density profile')
             # TODO: add plotting of assumed mass profile here
             # # retrieve density profiles of each model in the chain, and compute median and 16/84 percentiles
             # results = np.zeros((len(chain), len(r)))
@@ -301,10 +314,7 @@ if __name__ == "__main__":
             # percent error
             if true_path is not None:
                 percerr = 100*((dens_med - truedens) / truedens)
-                lowerr = 100*((dens_low - truedens) / truedens)
-                upperr = 100*((dens_upp - truedens) / truedens)
                 axs[1].plot(r, percerr, 'r')
-                axs[1].fill_between(r, lowerr, upperr, alpha=0.3, lw=0, color='r')
             axs[1].axhline(0, c='gray', linestyle='dashed')
             axs[1].set_ylim(-40,40)
 
@@ -325,8 +335,8 @@ if __name__ == "__main__":
             # again collect the model profiles and plot median and 16/84 percentile confidence intervals
             results_r, results_t = np.zeros((2, len(chain), len(r)))
             for i in range(len(chain)):
-                results_r[i] = np.exp(modelSigma(chain[i, len(knots_logr)-1 : 2*len(knots_logr)-1])(lr))
-                results_t[i] = np.exp(modelSigma(chain[i, 2*len(knots_logr)-1 :])(lr))
+                results_r[i] = np.exp(modelSigma(chain[i, :len(knots_logr)])(lr))
+                results_t[i] = np.exp(modelSigma(chain[i, len(knots_logr):])(lr))
             low_r, med_r, upp_r = np.percentile(results_r, [16,50,84], axis=0)
             axs[0,0].fill_between(r, low_r, upp_r, alpha=0.3, lw=0, color='g')
             axs[0,0].plot(r, med_r, color='g', label='MCMC Fit $\sigma_\mathrm{rad}$')
@@ -434,7 +444,7 @@ if __name__ == "__main__":
     velp = np.array(agama.getGalacticFromGalactocentric(x, y, z,
                                                         -y/R, x/R, 0*r,
                                                         *lsr_info)[3:6]) - vel0
-    
+
     # matrix of shape (2, npoints*nsamples) describing how the two intrinsic velocity dispersions
     # in 3d Galactocentric coords translate to the line-of-sight velocity dispersion at each sample point
     mat_vlos = np.array([ velr[2]**2, velt[2]**2 + velp[2]**2 ])
@@ -474,7 +484,8 @@ if __name__ == "__main__":
     # restarting it several times until it seems to arrive at the global minimum
     num_tries = 0
     while True:
-        if VERBOSE: print('\033[1;37mStarting deterministic search\033[0m')
+        if VERBOSE:
+            print('\033[1;37mStarting deterministic search\033[0m')
         # minimization algorithm - so provide a negative likelihood to it
         params = scipy.optimize.minimize(
             lambda x: -likelihood(x), params, method='Nelder-Mead',
@@ -490,7 +501,7 @@ if __name__ == "__main__":
         elif VERBOSE:
             print('Improved log-likelihood by %f' % (maxloglike - prevmaxloglike))
         prevmaxloglike = maxloglike
-        
+
         num_tries += 1
 
         if num_tries >= 100:
@@ -518,7 +529,8 @@ if __name__ == "__main__":
     with Pool() as pool:
         # numthreads = nwalkers//2   # parallel threads in emcee - make sure you don't clog up your machine!
         sampler  = emcee.EnsembleSampler(nwalkers, len(params), likelihood, pool=pool)
-        if VERBOSE: print('\033[1;37mStarting MCMC search\033[0m')
+        if VERBOSE:
+            print('\033[1;37mStarting MCMC search\033[0m')
         converged = False
         iter = 0
         while not converged:  # run several passes until log-likelihood stabilizes (convergence is reached)
@@ -592,21 +604,18 @@ if __name__ == "__main__":
     # columns arranged as [r, Menc] where Menc is the true enclosed mass
     # rows are sorted by increasing radius
     if true_path:
-        r_true, M_true = np.loadtxt(fname=true_path, delimiter=',', 
+        r_true, M_true = np.loadtxt(fname=true_path, delimiter=',',
                                     skiprows=1, unpack=True)
 
     # Thin the chain
     chain_smpl = chain[::20]
 
-    dlnsigr, sigr, sigt = np.zeros((3, len(chain_smpl), len(r)))
+    dlnrho, dlnsigr, sigr, sigt = np.zeros((4, len(chain_smpl), len(r)))
     for i in range(len(chain_smpl)):
-        if not use_external_density:
-            dlnrho[i] = modelDensity(chain_smpl[i, 0:len(knots_logr)-1])(lr, der=1)
-        else:
-            dlnrho[i] = medina24rrl_dlnrho(lr)
-        dlnsigr[i] = modelSigma(chain_smpl[i, 0:len(knots_logr)-1])(lr, der=1)
-        sigr   [i] = np.exp(modelSigma(chain_smpl[i, 0:len(knots_logr)-1])(lr))
-        sigt   [i] = np.exp(modelSigma(chain_smpl[i, len(knots_logr)-1 : 2*len(knots_logr)-1])(lr))
+        dlnrho[i] = external_dlnrho(lr)
+        dlnsigr[i] = modelSigma(chain_smpl[i, :len(knots_logr)])(lr, der=1)
+        sigr   [i] = np.exp(modelSigma(chain_smpl[i, :len(knots_logr)])(lr))
+        sigt   [i] = np.exp(modelSigma(chain_smpl[i, len(knots_logr):])(lr))
 
     Mencs, betas = np.zeros((2, len(chain_smpl), len(r)))
     for i in range(len(chain_smpl)):
@@ -636,7 +645,7 @@ if __name__ == "__main__":
     fig = plt.figure(figsize=(15, 10))
     axs = fig.subplots(nrows=2, ncols=1, sharex=True,
                        gridspec_kw=dict(hspace=0, height_ratios=[3, 1]))
-    
+
     description = kind+" ".join(load_params)
 
     if "m12f" in description:

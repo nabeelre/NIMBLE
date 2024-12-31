@@ -305,6 +305,54 @@ def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
             vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat, lsr_info)
 
 
+def load_BHB(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
+    fname = f"data/AuriDESI/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_rrl.fits"
+
+    rvtab =    Table.read(fname, hdu='rvtab')
+    fibermap = Table.read(fname, hdu='fibermap')
+    gaia =     Table.read(fname, hdu='gaia')
+    # true =     Table.read(fname, hdu='true_value')
+
+    print("Number of initial particles:", len(rvtab))
+
+    lsr_info = get_lsr_frame(halonum)
+
+    ra = np.asarray(gaia['RA'])  # deg
+    dec = np.asarray(gaia['DEC'])  # deg
+    ra  *= d2r  # ra and dec to rad
+    dec *= d2r
+
+    pmra = np.asarray(gaia['PMRA'])  # mas/yr
+    pmdec = np.asarray(gaia['PMDEC'])  # mas/yr
+    pmra_error = np.asarray(gaia['PMRA_ERROR'])  # mas/yr
+    pmdec_error = np.asarray(gaia['PMDEC_ERROR'])  # mas/yr
+
+    # TODO: fix
+    PMerr = (pmra_error + pmdec_error) / 2  # mas/yr
+
+    # Use fibermap['dist'] instead?
+    Gapp = np.asarray(fibermap['GAIA_PHOT_G_MEAN_MAG'])  # mag
+    # dist = 10**((Grrl - Gapp - 5)/-5)  # pc
+
+    vlos = np.asarray(fibermap['v_sys_Braga'])  # km/s
+    vloserr = np.asarray(fibermap['v_sys_Braga_err'])  # km/s
+
+    l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
+                                                    ra, dec, pmra, pmdec)
+
+    # back to degrees
+    l   /= d2r
+    b   /= d2r
+    dec /= d2r
+
+    filt = (abs(b) >= bmin) * (dec >= decmin) * (Gapp > Gmin) * (Gapp < Gmax)
+
+    true_sigmar, true_sigmat, true_dens_radii = halo_velocity_density_profiles(halonum)
+
+    return (l[filt], b[filt], true_dens_radii, Gapp[filt], pml[filt], pmb[filt],
+            vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat, lsr_info)
+
+
 def cartesian_to_spherical(xpos, ypos, zpos, xVel, yVel, zVel):
     numParticles = len(xpos)
 
