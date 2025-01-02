@@ -125,10 +125,10 @@ def parse_args(argv):
         figs_path = "results/BHB/iron/"
         true_path = None
 
-        Gmin = 16.0
-        Gmax = 19.5
-        iron.Gmin = Gmin
-        iron.Gmax = Gmax
+        dmin = 5.0
+        dmax = 60.6
+        iron.dmin = dmin
+        iron.dmax = dmax
 
         min_r = 1
         max_r = 100
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     kind, load_fnc, load_params, figs_path, true_path = parse_args(sys.argv)
 
     # TODO: pull in distance, some apparent mag
-    l, b, true_dens_radii, Gapp, pml, pmb, vlos, PMerr, vloserr, true_sigmar, true_sigmat, \
+    l, b, true_dens_radii, dist, pml, pmb, vlos, PMerr, disterr, vloserr, true_sigmar, true_sigmat, \
         lsr_info = load_fnc(*load_params, SUBSAMPLE, VERBOSE)
 
     external_rho = medina24rrl_rho
