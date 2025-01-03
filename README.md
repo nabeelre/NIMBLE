@@ -1,6 +1,6 @@
 # NIMBLE (**N**on-parametr**I**c jeans **M**odeling with **B**-sp**L**in**E**s)
 
-NIMBLE is a tool for inferring the cumulative mass profile of a gravitating system (the Milky Way) from full 6D phase space coordinates of its tracers (field halo RR Lyrae stars) via spherical Jeans modeling. NIMBLE uses B-splines to non-parametrically fit the velocity and density profiles used in evaluating the Jeans equation. Spherical Jeans modeling assumes the system is spherically symmetric and in dynamical equilibrium, but [Rehemtulla et al. (2022)](https://ui.adsabs.harvard.edu/abs/2022MNRAS.511.5536R/abstract) demonstrate that these conditions are necessary for an accurate mass profile estimate when applied mock Milky Way-like galaxies.
+NIMBLE is a tool for inferring the cumulative mass profile of a gravitating system (the Milky Way) from full 6D phase space coordinates of its tracers (field halo RR Lyrae stars) via spherical Jeans modeling. NIMBLE uses B-splines to non-parametrically fit the velocity and density profiles used in evaluating the Jeans equation. Spherical Jeans modeling assumes the system is spherically symmetric and in dynamical equilibrium, but [Rehemtulla et al. (2022)](https://ui.adsabs.harvard.edu/abs/2022MNRAS.511.5536R/abstract) demonstrate that these conditions are not necessary for an accurate mass profile estimate when applied mock Milky Way-like galaxies.
 
 
 
@@ -8,16 +8,21 @@ NIMBLE is a tool for inferring the cumulative mass profile of a gravitating syst
 
 Clone the NIMBLE repository
 
-```https://github.com/nabeelre/NIMBLE.git```
+```bash
+https://github.com/nabeelre/NIMBLE.git
+```
 
 Create an environment with the necessary dependencies. This may take ~5 minutes and you will be prompted to install additional components during the process.
 
-```conda env create --file environment.yaml```
+```bash
+conda env create --file environment.yaml
+```
 
 Activate the environment
 
-```conda activate nimble```
-
+```bash
+conda activate nimble
+```
 
 
 Mock datasets can be downloaded from their respective repositories - or contact nabeelr at u.northwestern.edu for NIMBLE-ready catalogs.
@@ -32,31 +37,39 @@ The `deconv.py` script should be used for RR Lyrae datasets which are spatially 
 
 The command line arguments tell `deconv.py` which dataset and parameters to use while running. For mock data, you need to specify which mock to run on, and you can always optionally overwrite the default knot configuration. Ordering of the parameters must match that shown here.
 
-##### Latte mocks
+#### Latte mocks
 
 Running `deconv.py` on the Latte m12i galaxy at LSR0 with Gaia DR3-like uncertainties with 6 knots ranging from 5 kpc to 50 kpc
 
-`python deconv.py latte m12i lsr0 dr3 5 50 6` 
+```
+python deconv.py latte m12i lsr0 dr3 5 50 6
+```
 
 In general, `python deconv.py latte {halo_name} {LSR_index} {gaia_DR} {min_knot} {max_knot} {num_knots}`
 
 
 
-##### AuriDESI mocks
+
+#### AuriDESI mocks
 
 Running `deconv.py` on the AuriDESI 06 halo at the 030 degrees LSR with 5 knots ranging from 10 kpc to 60 kpc
 
-`python deconv.py auridesi 06 030 10 60 5`
+```
+python deconv.py auridesi 06 030 10 60 5
+```
 
 In general, `python deconv.py auridesi {halo_name} {LSR_degrees} {min_knot} {max_knot} {num_knots}`
 
 
 
-##### DESI data
 
-Running deconv.py on the DESI internal iron release with 4 knots ranging from 5 kpc to 50 kpc
+#### DESI data
 
-`python deconv.py iron 5 50 4`
+Running `deconv.py` on the DESI internal iron release with 4 knots ranging from 5 kpc to 50 kpc
+
+```
+python deconv.py iron 5 50 4
+```
 
 In general, `python deconv.py latte {min_knot} {max_knot} {num_knots}`
 
