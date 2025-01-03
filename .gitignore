@@ -8,3 +8,8 @@ gizmo_read/
 private/
 
 *.pdf
+.vscode/
+sweeper.py
+NIMBLE\ To-do.md
+Untitled.ipynb
+MW_mass_profiles/
