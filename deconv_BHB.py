@@ -23,10 +23,8 @@ np.random.seed(42)
 SUBSAMPLE = False
 VERBOSE = True
 
-Grrl = 0.58   # TODO
-DMerr = 0.24   # TODO? scatter in abs.magnitude
-# assume that the error in distance modulus is purely due to intrinsic scatter in abs.mag
-# (neglect photometric measurement errors, which are likely much smaller even at G=20.7)
+Gmin = 16.0
+Gmax = 19.0
 bmin = 30.0   # min galactic latitude for the selection box (in degrees)
 decmin = -35.0   # min declination for the selection box (degrees)
 d2r = np.pi/180  # conversion from degrees to radians
@@ -105,7 +103,9 @@ def parse_args(argv):
         load_params = (halonum, lsrdeg)
         load_fnc = auridesi.load_BHB
 
-        Gmax = 19.0
+        # Gmin = 16.0
+        # Gmax = 19.0
+        auridesi.Gmin = Gmin
         auridesi.Gmax = Gmax
 
         bmin = 30
@@ -117,7 +117,8 @@ def parse_args(argv):
         if len(argv) == 7:
             knot_override = parse_knots(argv[4:])
     elif kind == "iron":
-        load_fnc = iron.load_BHB
+        # load_fnc = iron.load_BHB
+        load_fnc = iron.load_RRL_as_BHBs
         load_params = ()
 
         print("\033[1;33m**** RUNNING IRON ****\033[0m")
@@ -129,6 +130,9 @@ def parse_args(argv):
         dmax = 60.6
         iron.dmin = dmin
         iron.dmax = dmax
+
+        iron.Gmin = Gmin
+        iron.Gmax = Gmax
 
         min_r = 1
         max_r = 100
@@ -152,9 +156,8 @@ def parse_args(argv):
 if __name__ == "__main__":
     kind, load_fnc, load_params, figs_path, true_path = parse_args(sys.argv)
 
-    # TODO: pull in distance, some apparent mag
-    l, b, true_dens_radii, dist, pml, pmb, vlos, PMerr, disterr, vloserr, true_sigmar, true_sigmat, \
-        lsr_info = load_fnc(*load_params, SUBSAMPLE, VERBOSE)
+    l, b, true_dens_radii, dist_obs, Gapp, pml, pmb, vlos, PMerr, disterr, vloserr, true_sigmar, \
+        true_sigmat, lsr_info = load_fnc(*load_params, SUBSAMPLE)
 
     external_rho = medina24rrl_rho
     external_dlnrho = medina24rrl_dlnrho
@@ -181,7 +184,6 @@ if __name__ == "__main__":
 
     # diagnostic plot showing the stars in l,b and the selection region boundary
     if VERBOSE:
-        # TODO: replace Gapp with new apparent mag from Amanda's catalog
         plt.scatter(l, b, s=2, c=Gapp, cmap='hell', vmin=Gmin, vmax=Gmax+1, edgecolors='none', rasterized=True)
         plt.colorbar(label='Gapp')
         if blow <= -bmin*d2r:  # selection region in the southern Galactic hemisphere
@@ -408,7 +410,8 @@ if __name__ == "__main__":
 
     # convert l,b,dist.mod. of all stars into logarithm of Galactocentric radius (observed, not true)
     # unit conversion: degrees to radians for l,b,  mas/yr to km/s/kpc for PM
-    dist_obs = 10**(0.2*(Gapp-Grrl)-2)  # TODO: pull distance from amanda's sample
+    # dist_obs = 10**(0.2*(Gapp-Grrl)-2)  # old code for computing RRL distance
+    # now pulling directly from Amanda's BHB catalog
     x, y, z, vx, vy, vz = agama.getGalactocentricFromGalactic(
         l*d2r, b*d2r, dist_obs, pml*4.74, pmb*4.74, vlos, *lsr_info)
     logr_obs = 0.5 * np.log(x**2 + y**2 + z**2)
@@ -417,8 +420,10 @@ if __name__ == "__main__":
 
     # create random samples from distance modulus unc for each star and convert to Galactocentric r
     nsamples = 20  # number of random samples per star
-    Gsamp = (np.random.normal(size=(npoints, nsamples)) * DMerr + Gapp[:, None]).reshape(-1)
-    dist_samp = 10**(0.2*(Gsamp-Grrl)-2)  # TODO: instead, impose error directly in distance - based on spread for GC / dwarf?
+    dist_samp = (np.random.normal(size=(npoints, nsamples)) * disterr[:, None] + dist_obs[:, None]).reshape(-1)
+    # Old code for resampling distance using DMerr; now resampling based on individual distance errors
+    # Gsamp = (np.random.normal(size=(npoints, nsamples)) * 0.24 + Gapp[:, None]).reshape(-1)
+    # dist_samp = 10**(0.2*(Gsamp-0.58)-2)
     x, y, z = agama.getGalactocentricFromGalactic(
         np.repeat(l * d2r, nsamples), np.repeat(b * d2r, nsamples),
         dist_samp, galcen_distance=lsr_info[0], galcen_v_sun=lsr_info[1], z_sun=lsr_info[2]
