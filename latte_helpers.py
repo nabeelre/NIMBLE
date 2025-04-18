@@ -22,6 +22,7 @@ bmin  = 30.0
 decmin=-35.0
 d2r   = np.pi/180
 
+
 def rotate_x(x_old, y_old, theta):
     return x_old*np.cos(theta) + y_old*np.sin(theta)
 
@@ -329,5 +330,3 @@ def load(lattesim, lsr, gaia_release, SUBSAMPLE, VERBOSE):
 
 if __name__ == "__main__":
     write_mock_and_true(sys.argv[1])
-    
-    
