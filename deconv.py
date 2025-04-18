@@ -22,7 +22,7 @@ np.random.seed(42)
 SUBSAMPLE = False
 VERBOSE = True
 
-Gmax = 20.7   # max apparent G magnitude for a RRL star to enter the selection
+Gmax = 20.0   # max apparent G magnitude for a RRL star to enter the selection
 Gmin = 16.0   # min apparent G magnitude (exclude nearby stars)
 Grrl = 0.58   # abs.magnitude of RRL
 # (mean value; the actual value for each star is scattered around it) From Iorio&Belokurov2018
@@ -39,7 +39,7 @@ num_knots = 4
 
 min_r     = 1   # kpc
 max_r     = 100  # kpc
-use_external_density = False
+use_external_density = True
 
 
 def medina24rrl_rho(radii):
@@ -216,8 +216,11 @@ def parse_args(argv):
         figs_path = "results/iron/"
         true_path = None
 
-        Gmax = 19.5
+        Gmax = 20.0
         iron.Gmax = Gmax
+
+        Gmin = 16.0
+        iron.Gmin = Gmin
 
         min_r = 1
         max_r = 100
