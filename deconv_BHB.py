@@ -15,7 +15,8 @@ import os
 # import latte_helpers as latte
 import auridesi_helpers as auridesi
 import iron_helpers as iron
-from deconv import getSurveyFootprintBoundary, parse_knots
+import symphony_helpers as symphony
+from deconv import getSurveyFootprintBoundary, parse_knots, medina24rrl_dlnrho, medina24rrl_rho
 
 np.set_printoptions(linewidth=200, precision=6, suppress=True)
 np.random.seed(42)
@@ -24,14 +25,14 @@ SUBSAMPLE = False
 VERBOSE = True
 
 Gmin = 16.0
-Gmax = 19.0
+Gmax = 20.0
 bmin = 30.0   # min galactic latitude for the selection box (in degrees)
 decmin = -35.0   # min declination for the selection box (degrees)
 d2r = np.pi/180  # conversion from degrees to radians
 
 min_knot = 5   # kpc
-max_knot = 40  # kpc
-num_knots = 5
+max_knot = 50  # kpc
+num_knots = 4
 
 min_r = 1   # kpc
 max_r = 100  # kpc
@@ -43,39 +44,46 @@ def write_csv(data, filename, column_titles):
     )
 
 
-def medina24rrl_rho(radii):  # TODO, replace with BHB profile
-    # https://ui.adsabs.harvard.edu/abs/2024MNRAS.531.4762M/abstract
-    R_break = 18.0
-    slope_inner = -2.05
-    slope_outer = -4.47
-    A1 = 0.67
-    A2 = 1.52
-
+def amarante24_avgbhb_rho(radii):
+    # https://ui.adsabs.harvard.edu/abs/2024A%26A...690A.166A/abstract
+    # requires using r_q (the flattened radius) to calculate density within 30 kpc
+    # only use this for r>30 kpc at which point r~r_q
     if isinstance(radii, float) or isinstance(radii, int):
         radii = [radii]
 
-    log10dens = np.zeros(len(radii))
-    for i, r in enumerate(radii):
-        if r < R_break:
-            log10dens[i] = A1 + slope_inner*np.log10(r/8)
+    r_break = 19.1
+    slope_inner = -2.85
+    slope_outer = -4.55
+
+    # q_break = 30
+    # q_inner = 0.77
+    # q_outer = 0.99
+    r_q = radii  # simplification for now
+
+    num_dens = np.zeros(len(r_q))
+    for i, r in enumerate(r_q):
+        if r < r_break:
+            num_dens[i] = r**slope_inner
         else:
-            log10dens[i] = A2 + slope_outer*np.log10(r/8)
+            num_dens[i] = r_break**slope_inner * (r - r_break)**slope_outer
 
-    return 10**log10dens
+    return num_dens
 
 
-def medina24rrl_dlnrho(log_radii):  # TODO, replace with BHB profile
-    # https://ui.adsabs.harvard.edu/abs/2024MNRAS.531.4762M/abstract
-    R_break = 18.0
-    slope_inner = -2.05
-    slope_outer = -4.47
-
+def amarante24_avgbhb_dlnrho(log_radii):
+    # https://ui.adsabs.harvard.edu/abs/2024A%26A...690A.166A/abstract
+    # requires using r_q (the flattened radius) to calculate density within 30 kpc
+    # only use this for r>30 kpc at which point r~r_q
     if isinstance(log_radii, float) or isinstance(log_radii, int):
         log_radii = [log_radii]
 
+    r_break = 19.1
+    slope_inner = -2.85
+    slope_outer = -4.55
+
     dlnrho_dlnr = np.zeros(len(log_radii))
     for i, lr in enumerate(log_radii):
-        if np.exp(lr) < R_break:
+        if np.exp(lr) < r_break:
             dlnrho_dlnr[i] = slope_inner
         else:
             dlnrho_dlnr[i] = slope_outer
@@ -117,8 +125,8 @@ def parse_args(argv):
         if len(argv) == 7:
             knot_override = parse_knots(argv[4:])
     elif kind == "iron":
-        # load_fnc = iron.load_BHB
-        load_fnc = iron.load_RRL_as_BHBs
+        load_fnc = iron.load_BHB
+        # load_fnc = iron.load_RRL_as_BHBs
         load_params = ()
 
         print("\033[1;33m**** RUNNING IRON ****\033[0m")
@@ -126,16 +134,43 @@ def parse_args(argv):
         figs_path = "results/BHB/iron/"
         true_path = None
 
-        dmin = 5.0
-        dmax = 60.6
+        dmin = 40.0
+        dmax = 65.0
         iron.dmin = dmin
         iron.dmax = dmax
+        min_r = 30
+        max_r = 80
 
-        iron.Gmin = Gmin
-        iron.Gmax = Gmax
+        # iron.Gmin = Gmin
+        # iron.Gmax = Gmax
+        # min_r = 1
+        # max_r = 100
 
-        min_r = 1
-        max_r = 100
+        if len(argv) == 5:
+            knot_override = parse_knots(argv[2:])
+    elif kind == "symphony":
+        halonum = argv[2].lower()
+        lsrdeg = argv[3].upper()
+
+        assert (halonum in ["004", "113", "169", "170", "222", "229", "282", "327",
+                            "349", "407", "453", "476", "659", "747", "756", "788",
+                            "975", "983"])
+        assert (lsrdeg in ["0", "45", "90", "135", "180", "225", "270", "315"])
+
+        print(f"\033[1;33m**** RUNNING SYMPHONY {halonum} {lsrdeg} ****\033[0m")
+
+        figs_path = f"results/BHB/symphony/deconv_{halonum}_{lsrdeg}/"
+        true_path = None  # f"data/auriga/H{halonum}/Au{halonum}_true.csv"
+
+        load_fnc = symphony.load_BHB
+        load_params = (halonum, lsrdeg)
+
+        dmin = 25.0
+        dmax = 50.0
+        iron.dmin = dmin
+        iron.dmax = dmax
+        min_r = 10
+        max_r = 80
 
         if len(argv) == 5:
             knot_override = parse_knots(argv[2:])
@@ -159,8 +194,8 @@ if __name__ == "__main__":
     l, b, true_dens_radii, dist_obs, Gapp, pml, pmb, vlos, PMerr, disterr, vloserr, true_sigmar, \
         true_sigmat, lsr_info = load_fnc(*load_params, SUBSAMPLE)
 
-    external_rho = medina24rrl_rho
-    external_dlnrho = medina24rrl_dlnrho
+    external_rho = amarante24_avgbhb_rho
+    external_dlnrho = amarante24_avgbhb_dlnrho
 
     if VERBOSE:
         print('Number of particles in survey volume:', len(l))
@@ -274,7 +309,7 @@ if __name__ == "__main__":
 
         r  = np.logspace(np.log10(min_r), np.log10(max_r), 200)
         lr = np.log(r)
-        rhist = np.logspace(np.log10(min_r), np.log10(max_r), 81)
+        rhist = np.logspace(np.log10(min_r), np.log10(max_r), 41)
         lrhist = np.log(rhist)
         if true_path is not None:
             num_true_knots = 12
