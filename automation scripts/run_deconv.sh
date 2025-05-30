@@ -27,7 +27,7 @@ drs=('dr3') #('dr3' 'dr4' 'dr5')
 
 for sim in "${sims[@]}"; do
   # prepare the raw latte snapshot for use with the Jeans modeling routine
-  python3 read_latte.py $sim
+  python3 ../latte_helpers.py $sim
 done
 
 # Forward modeling routine with deconvolution will be run on all combinations
@@ -36,11 +36,11 @@ for sim in "${sims[@]}"; do
   for lsr in "${lsrs[@]}"; do
     for dr in "${drs[@]}"; do
       # Run the NIMBLE forward modeling jeans routine
-      python3 deconv.py ${sim} ${lsr} ${dr}
+      python3 ../deconv.py ${sim} ${lsr} ${dr}
     done
   done
 done
 
 for dr in "${drs[@]}"; do
-  python3 figures/fig7.py ${dr}
+  python3 ../figures/fig7.py ${dr}
 done
