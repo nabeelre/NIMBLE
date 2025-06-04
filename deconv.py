@@ -39,7 +39,7 @@ num_knots = 4
 
 min_r     = 1   # kpc
 max_r     = 100  # kpc
-use_external_density = True
+use_external_density = False
 
 
 def medina24rrl_rho(radii):
