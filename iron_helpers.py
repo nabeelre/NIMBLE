@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import agama
 
-Gmax  = 20.0
-Gmin  = 16.0
+Gmax  = 19.0
+Gmin  = 15.0
 
 dmax  = 60.0
 dmin  = 30.0
@@ -30,7 +30,6 @@ def load_RRL(SUBSAMPLE, VERBOSE):
 
     PMerr = (pmra_error + pmdec_error) / 2  # mas/yr
 
-    # TODO, restore to phot_g_mean_mag?
     Gapp = rrls['int_average_g'].to_numpy()  # mag
 
     vlos = rrls['v0_mean'].to_numpy()  # km/s
